@@ -19,7 +19,7 @@ This repo relies on [protocol buffers](https://protobuf.dev/) for code generatio
 $ git clone git@github.com:rotationalio/ensign.git ../ensign
 ```
 
-Then run make to build the protocol buffers from the .proto defintions.
+Then run make to build the protocol buffers from the .proto definitions.
 
 ```
 $ make grpc
