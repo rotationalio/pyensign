@@ -6,6 +6,7 @@ from google.protobuf.internal import builder as _builder
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import symbol_database as _symbol_database
+
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
@@ -18,33 +19,35 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18\x61pi/v1beta1/ensign.proto\x12\x0e\x65nsign.v1beta1\x1a\x17\x61pi/v1beta1/event.proto\x1a\x17\x61pi/v1beta1/topic.proto\x1a\x18\x61pi/v1beta1/groups.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x95\x01\n\x0bPublication\x12\"\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x13.ensign.v1beta1.AckH\x00\x12$\n\x04nack\x18\x02 \x01(\x0b\x32\x14.ensign.v1beta1.NackH\x00\x12\x33\n\x0c\x63lose_stream\x18\x03 \x01(\x0b\x32\x1b.ensign.v1beta1.CloseStreamH\x00\x42\x07\n\x05\x65mbed\"\x94\x01\n\x0cSubscription\x12\"\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x13.ensign.v1beta1.AckH\x00\x12$\n\x04nack\x18\x02 \x01(\x0b\x32\x14.ensign.v1beta1.NackH\x00\x12\x31\n\x0bopen_stream\x18\x03 \x01(\x0b\x32\x1a.ensign.v1beta1.OpenStreamH\x00\x42\x07\n\x05\x65mbed\"@\n\x03\x41\x63k\x12\n\n\x02id\x18\x01 \x01(\t\x12-\n\tcommitted\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"/\n\x04Nack\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\r\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"_\n\nOpenStream\x12\x13\n\x0b\x63onsumer_id\x18\x01 \x01(\t\x12\x0e\n\x06topics\x18\x02 \x03(\t\x12,\n\x05group\x18\x03 \x01(\x0b\x32\x1d.ensign.v1beta1.ConsumerGroup\"F\n\x0b\x43loseStream\x12\x0e\n\x06\x65vents\x18\x01 \x01(\x04\x12\x14\n\x0ctopic_offset\x18\x02 \x01(\x04\x12\x11\n\tconsumers\x18\x03 \x01(\x04\"T\n\x0bHealthCheck\x12\x10\n\x08\x61ttempts\x18\x01 \x01(\r\x12\x33\n\x0flast_checked_at\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xbb\x02\n\x0cServiceState\x12\x33\n\x06status\x18\x01 \x01(\x0e\x32#.ensign.v1beta1.ServiceState.Status\x12\x0f\n\x07version\x18\x02 \x01(\t\x12)\n\x06uptime\x18\x03 \x01(\x0b\x32\x19.google.protobuf.Duration\x12.\n\nnot_before\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12-\n\tnot_after\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"[\n\x06Status\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0b\n\x07HEALTHY\x10\x01\x12\r\n\tUNHEALTHY\x10\x02\x12\n\n\x06\x44\x41NGER\x10\x03\x12\x0b\n\x07OFFLINE\x10\x04\x12\x0f\n\x0bMAINTENANCE\x10\x05\"6\n\x08PageInfo\x12\x11\n\tpage_size\x18\x01 \x01(\r\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t2\xac\x03\n\x06\x45nsign\x12\x43\n\x07Publish\x12\x15.ensign.v1beta1.Event\x1a\x1b.ensign.v1beta1.Publication\"\x00(\x01\x30\x01\x12\x46\n\tSubscribe\x12\x1c.ensign.v1beta1.Subscription\x1a\x15.ensign.v1beta1.Event\"\x00(\x01\x30\x01\x12\x44\n\nListTopics\x12\x18.ensign.v1beta1.PageInfo\x1a\x1a.ensign.v1beta1.TopicsPage\"\x00\x12=\n\x0b\x43reateTopic\x12\x15.ensign.v1beta1.Topic\x1a\x15.ensign.v1beta1.Topic\"\x00\x12I\n\x0b\x44\x65leteTopic\x12\x18.ensign.v1beta1.TopicMod\x1a\x1e.ensign.v1beta1.TopicTombstone\"\x00\x12\x45\n\x06Status\x12\x1b.ensign.v1beta1.HealthCheck\x1a\x1c.ensign.v1beta1.ServiceState\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x18\x61pi/v1beta1/ensign.proto\x12\x0e\x65nsign.v1beta1\x1a\x17\x61pi/v1beta1/event.proto\x1a\x17\x61pi/v1beta1/topic.proto\x1a\x18\x61pi/v1beta1/groups.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto"\x95\x01\n\x0bPublication\x12"\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x13.ensign.v1beta1.AckH\x00\x12$\n\x04nack\x18\x02 \x01(\x0b\x32\x14.ensign.v1beta1.NackH\x00\x12\x33\n\x0c\x63lose_stream\x18\x03 \x01(\x0b\x32\x1b.ensign.v1beta1.CloseStreamH\x00\x42\x07\n\x05\x65mbed"\x94\x01\n\x0cSubscription\x12"\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x13.ensign.v1beta1.AckH\x00\x12$\n\x04nack\x18\x02 \x01(\x0b\x32\x14.ensign.v1beta1.NackH\x00\x12\x31\n\x0bopen_stream\x18\x03 \x01(\x0b\x32\x1a.ensign.v1beta1.OpenStreamH\x00\x42\x07\n\x05\x65mbed"@\n\x03\x41\x63k\x12\n\n\x02id\x18\x01 \x01(\t\x12-\n\tcommitted\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp"/\n\x04Nack\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\r\x12\r\n\x05\x65rror\x18\x03 \x01(\t"_\n\nOpenStream\x12\x13\n\x0b\x63onsumer_id\x18\x01 \x01(\t\x12\x0e\n\x06topics\x18\x02 \x03(\t\x12,\n\x05group\x18\x03 \x01(\x0b\x32\x1d.ensign.v1beta1.ConsumerGroup"F\n\x0b\x43loseStream\x12\x0e\n\x06\x65vents\x18\x01 \x01(\x04\x12\x14\n\x0ctopic_offset\x18\x02 \x01(\x04\x12\x11\n\tconsumers\x18\x03 \x01(\x04"T\n\x0bHealthCheck\x12\x10\n\x08\x61ttempts\x18\x01 \x01(\r\x12\x33\n\x0flast_checked_at\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp"\xbb\x02\n\x0cServiceState\x12\x33\n\x06status\x18\x01 \x01(\x0e\x32#.ensign.v1beta1.ServiceState.Status\x12\x0f\n\x07version\x18\x02 \x01(\t\x12)\n\x06uptime\x18\x03 \x01(\x0b\x32\x19.google.protobuf.Duration\x12.\n\nnot_before\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12-\n\tnot_after\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp"[\n\x06Status\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0b\n\x07HEALTHY\x10\x01\x12\r\n\tUNHEALTHY\x10\x02\x12\n\n\x06\x44\x41NGER\x10\x03\x12\x0b\n\x07OFFLINE\x10\x04\x12\x0f\n\x0bMAINTENANCE\x10\x05"6\n\x08PageInfo\x12\x11\n\tpage_size\x18\x01 \x01(\r\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t2\x84\x05\n\x06\x45nsign\x12\x43\n\x07Publish\x12\x15.ensign.v1beta1.Event\x1a\x1b.ensign.v1beta1.Publication"\x00(\x01\x30\x01\x12\x46\n\tSubscribe\x12\x1c.ensign.v1beta1.Subscription\x1a\x15.ensign.v1beta1.Event"\x00(\x01\x30\x01\x12\x44\n\nListTopics\x12\x18.ensign.v1beta1.PageInfo\x1a\x1a.ensign.v1beta1.TopicsPage"\x00\x12=\n\x0b\x43reateTopic\x12\x15.ensign.v1beta1.Topic\x1a\x15.ensign.v1beta1.Topic"\x00\x12?\n\rRetrieveTopic\x12\x15.ensign.v1beta1.Topic\x1a\x15.ensign.v1beta1.Topic"\x00\x12I\n\x0b\x44\x65leteTopic\x12\x18.ensign.v1beta1.TopicMod\x1a\x1e.ensign.v1beta1.TopicTombstone"\x00\x12H\n\nTopicNames\x12\x18.ensign.v1beta1.PageInfo\x1a\x1e.ensign.v1beta1.TopicNamesPage"\x00\x12K\n\x0bTopicExists\x12\x19.ensign.v1beta1.TopicName\x1a\x1f.ensign.v1beta1.TopicExistsInfo"\x00\x12\x45\n\x06Status\x12\x1b.ensign.v1beta1.HealthCheck\x1a\x1c.ensign.v1beta1.ServiceState"\x00\x62\x06proto3'
+)
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'api.v1beta1.ensign_pb2', globals())
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "api.v1beta1.ensign_pb2", globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
-  DESCRIPTOR._options = None
-  _PUBLICATION._serialized_start=186
-  _PUBLICATION._serialized_end=335
-  _SUBSCRIPTION._serialized_start=338
-  _SUBSCRIPTION._serialized_end=486
-  _ACK._serialized_start=488
-  _ACK._serialized_end=552
-  _NACK._serialized_start=554
-  _NACK._serialized_end=601
-  _OPENSTREAM._serialized_start=603
-  _OPENSTREAM._serialized_end=698
-  _CLOSESTREAM._serialized_start=700
-  _CLOSESTREAM._serialized_end=770
-  _HEALTHCHECK._serialized_start=772
-  _HEALTHCHECK._serialized_end=856
-  _SERVICESTATE._serialized_start=859
-  _SERVICESTATE._serialized_end=1174
-  _SERVICESTATE_STATUS._serialized_start=1083
-  _SERVICESTATE_STATUS._serialized_end=1174
-  _PAGEINFO._serialized_start=1176
-  _PAGEINFO._serialized_end=1230
-  _ENSIGN._serialized_start=1233
-  _ENSIGN._serialized_end=1661
+    DESCRIPTOR._options = None
+    _PUBLICATION._serialized_start = 186
+    _PUBLICATION._serialized_end = 335
+    _SUBSCRIPTION._serialized_start = 338
+    _SUBSCRIPTION._serialized_end = 486
+    _ACK._serialized_start = 488
+    _ACK._serialized_end = 552
+    _NACK._serialized_start = 554
+    _NACK._serialized_end = 601
+    _OPENSTREAM._serialized_start = 603
+    _OPENSTREAM._serialized_end = 698
+    _CLOSESTREAM._serialized_start = 700
+    _CLOSESTREAM._serialized_end = 770
+    _HEALTHCHECK._serialized_start = 772
+    _HEALTHCHECK._serialized_end = 856
+    _SERVICESTATE._serialized_start = 859
+    _SERVICESTATE._serialized_end = 1174
+    _SERVICESTATE_STATUS._serialized_start = 1083
+    _SERVICESTATE_STATUS._serialized_end = 1174
+    _PAGEINFO._serialized_start = 1176
+    _PAGEINFO._serialized_end = 1230
+    _ENSIGN._serialized_start = 1233
+    _ENSIGN._serialized_end = 1877
 # @@protoc_insertion_point(module_scope)
