@@ -2,9 +2,9 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from api.v1beta1 import ensign_pb2 as api_dot_v1beta1_dot_ensign__pb2
-from api.v1beta1 import event_pb2 as api_dot_v1beta1_dot_event__pb2
-from api.v1beta1 import topic_pb2 as api_dot_v1beta1_dot_topic__pb2
+from pyensign.api.v1beta1 import ensign_pb2 as api_dot_v1beta1_dot_ensign__pb2
+from pyensign.api.v1beta1 import event_pb2 as api_dot_v1beta1_dot_event__pb2
+from pyensign.api.v1beta1 import topic_pb2 as api_dot_v1beta1_dot_topic__pb2
 
 
 class EnsignStub(object):
