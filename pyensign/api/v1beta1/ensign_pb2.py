@@ -12,9 +12,9 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from api.v1beta1 import event_pb2 as api_dot_v1beta1_dot_event__pb2
-from api.v1beta1 import topic_pb2 as api_dot_v1beta1_dot_topic__pb2
-from api.v1beta1 import groups_pb2 as api_dot_v1beta1_dot_groups__pb2
+from pyensign.api.v1beta1 import event_pb2 as api_dot_v1beta1_dot_event__pb2
+from pyensign.api.v1beta1 import topic_pb2 as api_dot_v1beta1_dot_topic__pb2
+from pyensign.api.v1beta1 import groups_pb2 as api_dot_v1beta1_dot_groups__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb2
 

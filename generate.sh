@@ -32,3 +32,11 @@ python3 -m grpc_tools.protoc -I$PROTO_DIR \
 python3 -m grpc_tools.protoc -I$PROTO_DIR \
     --python_out=pyensign \
     $MIMETYPE/mimetype.proto
+
+# Fix the imports
+sed -i'.bak' 's/from api.v1beta1/from pyensign.api.v1beta1/g' pyensign/api/v1beta1/*.py
+sed -i'.bak' 's/from api.v1beta1/from pyensign.api.v1beta1/g' pyensign/mimetype/v1beta1/*.py
+sed -i'.bak' 's/from mimetype.v1beta1/from pyensign.mimetype.v1beta1/g' pyensign/api/v1beta1/*.py
+sed -i'.bak' 's/from mimetype.v1beta1/from pyensign.mimetype.v1beta1/g' pyensign/mimetype/v1beta1/*.py
+rm pyensign/api/v1beta1/*.bak
+rm pyensign/mimetype/v1beta1/*.bak
