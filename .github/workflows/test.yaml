@@ -1,0 +1,57 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+      - "v*"
+    tags:
+      - "v*"
+  pull_request:
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/pyensign
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          path: ${{ github.workspace }}/pyensign
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+          pip install -r requirements.txt
+
+      - name: Clone Ensign repository
+        uses: actions/checkout@v3
+        with:
+          repository: rotationalio/ensign
+          ref: main
+          path: ${{ github.workspace }}/ensign
+
+      - name: Build protocol buffers
+        run: |
+          make grpc
+
+      - name: Lint with flake8
+        run: |
+          flake8 .
+
+      - name: Run tests
+        run: |
+          pytest
+      
