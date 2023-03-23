@@ -9,7 +9,7 @@ class Connection:
     Connection defines a gRPC connection to an Ensign server.
     """
 
-    def __init__(self, addrport, auth=None):
+    def __init__(self, addrport, insecure=False, auth=None):
         """
         Connect to an Ensign server.
 
@@ -17,19 +17,31 @@ class Connection:
         ----------
         addrport : str
             The address:port of the Ensign server (e.g. "localhost:5356")
-        auth : AuthClient (optional)
-            Authentication client for obtaining JWT tokens
+        insecure : bool
+            Set to True to use an insecure connection. This is only useful for testing
+            against a local Ensign server and overrides the auth parameter.
+        auth : grpc.AuthMetadataPlugin or None
+            Plugin that provides an access token for per-request authentication.
         """
 
         addrParts = addrport.split(":", 2)
         if len(addrParts) != 2 or not addrParts[0] or not addrParts[1]:
             raise ValueError("Invalid address:port format")
 
-        # TODO: If authentication is specified, create a channel with per-request creds
-        if auth is not None:
-            raise NotImplementedError("Authentication not yet implemented")
-
-        self.channel = grpc.insecure_channel(addrport)
+        if insecure:
+            if auth is not None:
+                raise ValueError("Cannot use auth with insecure=True")
+            self.channel = grpc.insecure_channel(addrport)
+        else:
+            credentials = grpc.ssl_channel_credentials()
+            if auth is not None:
+                call_credentials = grpc.metadata_call_credentials(
+                    auth, name="auth gateway"
+                )
+                credentials = grpc.composite_channel_credentials(
+                    credentials, call_credentials
+                )
+            self.channel = grpc.secure_channel(addrport, credentials)
 
 
 class Client:
@@ -56,3 +68,18 @@ class Client:
         )
         rep = self.stub.Status(params)
         return rep.status, rep.version, rep.uptime, rep.not_before, rep.not_after
+
+    def topic_names(self, page_size=100, next_page_token=""):
+        params = ensign_pb2.PageInfo(
+            page_size=page_size, next_page_token=next_page_token
+        )
+        rep = self.stub.TopicNames(params)
+        return rep.topic_names, rep.next_page_token
+
+    # TODO: Handle binary data (e.g. marshalled ULIDs)
+    def list_topics(self, page_size=100, next_page_token=""):
+        params = ensign_pb2.PageInfo(
+            page_size=page_size, next_page_token=next_page_token
+        )
+        rep = self.stub.ListTopics(params)
+        return rep.topics, rep.next_page_token
