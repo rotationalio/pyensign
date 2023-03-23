@@ -1,18 +1,25 @@
 import os
 import pytest
 from ulid import ULID
+from pytest_httpserver import HTTPServer
 
-from pyensign.connection import Connection
 from pyensign.connection import Client
-from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import event_pb2
 from pyensign.api.v1beta1 import topic_pb2
+from pyensign.connection import Connection
+from pyensign.auth.client import AuthClient
+from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 
 
 @pytest.fixture
 def live(request):
     return request.config.getoption("--live")
+
+
+@pytest.fixture
+def authserver():
+    return os.environ.get("ENSIGN_AUTH_SERVER")
 
 
 @pytest.fixture
@@ -37,6 +44,20 @@ def client(grpc_channel):
     return Client(MockConnection(grpc_channel))
 
 
+@pytest.fixture
+def auth(httpserver: HTTPServer):
+    creds = {"client_id": "id", "client_secret": "secret"}
+    return AuthClient(httpserver.url_for(""), creds)
+
+
+@pytest.fixture
+def creds():
+    return {
+        "client_id": os.environ.get("ENSIGN_CLIENT_ID"),
+        "client_secret": os.environ.get("ENSIGN_CLIENT_SECRET"),
+    }
+
+
 class TestConnection:
     """
     Test establishing a connection to an Ensign server.
@@ -44,6 +65,14 @@ class TestConnection:
 
     def test_connect(self):
         conn = Connection("localhost:5356")
+        assert conn.channel is not None
+
+    def test_connect_insecure(self):
+        conn = Connection("localhost:5356", insecure=True)
+        assert conn.channel is not None
+
+    def test_connect_secure(self, auth):
+        conn = Connection("localhost:5356", auth=auth)
         assert conn.channel is not None
 
     @pytest.mark.parametrize(
@@ -58,6 +87,12 @@ class TestConnection:
     def test_connect_bad_addr(self, addrport):
         with pytest.raises(ValueError):
             Connection(addrport)
+
+    def test_connect_bad_args(self):
+        with pytest.raises(ValueError):
+            Connection(
+                "localhost:5356", insecure=True, auth=AuthClient("localhost:5356", {})
+            )
 
 
 class MockConnection(Connection):
@@ -174,6 +209,20 @@ class TestClient:
         assert not_before is not None
         assert not_after is not None
 
+    def test_insecure(self, live, ensignserver):
+        if not live:
+            pytest.skip("Skipping live test")
+        if not ensignserver:
+            pytest.fail("ENSIGN_SERVER environment variable not set")
+
+        ensign = Client(Connection(ensignserver, insecure=True))
+        status, version, uptime, not_before, not_after = ensign.status()
+        assert status is not None
+        assert version is not None
+        assert uptime is not None
+        assert not_before is not None
+        assert not_after is not None
+
     def test_status_live(self, live, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
@@ -187,3 +236,20 @@ class TestClient:
         assert uptime is not None
         assert not_before is not None
         assert not_after is not None
+
+    def test_auth_endpoint(self, live, ensignserver, authserver, creds):
+        if not live:
+            pytest.skip("Skipping live test")
+        if not ensignserver:
+            pytest.fail("ENSIGN_SERVER environment variable not set")
+        if not authserver:
+            pytest.fail("ENSIGN_AUTH_SERVER environment variable not set")
+        if not creds:
+            pytest.fail(
+                "ENSIGN_CLIENT_ID and ENSIGN_CLIENT_SECRET environment variables not set"
+            )
+
+        ensign = Client(Connection(ensignserver, auth=AuthClient(authserver, creds)))
+        topics, next_page_token = ensign.list_topics()
+        assert topics is not None
+        assert next_page_token is not None

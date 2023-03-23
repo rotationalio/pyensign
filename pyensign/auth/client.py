@@ -1,3 +1,4 @@
+import grpc
 import requests
 
 from pyensign.exceptions import AuthenticationError
@@ -6,7 +7,7 @@ ACCESS_TOKEN = "access_token"
 REFRESH_TOKEN = "refresh_token"
 
 
-class AuthClient:
+class AuthClient(grpc.AuthMetadataPlugin):
     """
     AuthClient provides an interface for token-based HTTP authentication by requesting
     authentication tokens from a server. Authenticate should be called to obtain an
@@ -33,6 +34,22 @@ class AuthClient:
         self._access_token = ""
         self._refresh_token = ""
         self._last_login = None
+
+    def __call__(self, _, callback):
+        """
+        gRPC callback to add the access token on each request.
+        """
+        # TODO: If access token is expired, refresh instead
+        exception = None
+        meta = []
+        if not self._access_token:
+            try:
+                self.authenticate()
+            except AuthenticationError as e:
+                exception = e
+        if not exception:
+            meta.append(("authorization", "Bearer " + self._access_token))
+        callback(meta, exception)
 
     def authenticate(self):
         # TODO: Check if access token is expired

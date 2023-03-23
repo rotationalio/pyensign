@@ -39,6 +39,54 @@ class TestAuthClient:
         assert client._access_token == "access"
         assert client._refresh_token == "refresh"
 
+    def test_authenticate_callback(self, httpserver: HTTPServer):
+        response = {"access_token": "access", "refresh_token": "refresh"}
+        httpserver.expect_request("/v1/authenticate").respond_with_json(response)
+
+        creds = {"client_id": "id", "client_secret": "secret"}
+        client = AuthClient(httpserver.url_for(""), creds)
+
+        # Test capturing metadata from the callback
+        meta = None
+        error = None
+
+        def fetch_meta(m, e):
+            nonlocal meta
+            nonlocal error
+            meta = m
+            error = e
+
+        client("test_authenticate_callback", fetch_meta)
+        assert meta == [("authorization", "Bearer access")]
+        assert error is None
+
+        # Second call uses the cached access token
+        meta = None
+        error = None
+        client("test_authenticate_callback", fetch_meta)
+        assert meta == [("authorization", "Bearer access")]
+        assert error is None
+
+    def test_authenticate_callback_error(self, httpserver: HTTPServer):
+        httpserver.expect_request("/v1/authenticate").respond_with_json(
+            {"error": "bad API credentials"}, status=400
+        )
+        client = AuthClient(httpserver.url_for(""), {})
+
+        # Test errors are captured instead of raised
+        meta = None
+        error = None
+
+        def fetch_meta(m, e):
+            nonlocal meta
+            nonlocal error
+            meta = m
+            error = e
+
+        client("test_authenticate_callback_error", fetch_meta)
+        assert len(meta) == 0
+        assert isinstance(error, AuthenticationError)
+
     def test_authenticate_bad_credentials(self, httpserver: HTTPServer):
         httpserver.expect_request("/v1/authenticate").respond_with_json(
             {"error": "bad API credentials"}, status=400
