@@ -17,3 +17,19 @@ class AuthenticationError(PyEnsignError):
     """
 
     pass
+
+
+class EnsignError(PyEnsignError):
+    """
+    Raised when PyEnsign receives an error from the Ensign server
+    """
+
+    pass
+
+
+class EnsignResponseType(PyEnsignError):
+    """
+    Raised when PyEnsign receives an unexpected message type from the Ensign server
+    """
+
+    pass
