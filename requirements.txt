@@ -12,7 +12,9 @@ packaging==23.0
 pluggy==1.0.0
 protobuf==4.22.1
 pytest==7.2.2
+pytest-grpc==0.8.0
 pytest-httpserver==1.0.6
+python-ulid==1.1.0
 requests==2.28.2
 tomli==2.0.1
 urllib3==1.26.15
