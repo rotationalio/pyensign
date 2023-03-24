@@ -27,9 +27,17 @@ class EnsignError(PyEnsignError):
     pass
 
 
-class EnsignResponseType(PyEnsignError):
+class EnsignResponseType(EnsignError):
     """
     Raised when PyEnsign receives an unexpected message type from the Ensign server
+    """
+
+    pass
+
+
+class EnsignTopicCreateError(EnsignError):
+    """
+    Raised when Ensign failed to create a topic
     """
 
     pass

@@ -3,7 +3,7 @@ import os
 from pyensign.connection import Client
 from pyensign.connection import Connection
 from pyensign.auth.client import AuthClient
-from pyensign.exceptions import EnsignResponseType
+from pyensign.exceptions import EnsignResponseType, EnsignTopicCreateError
 
 
 class Ensign:
@@ -13,8 +13,8 @@ class Ensign:
 
     def __init__(
         self,
-        client_id=None,
-        client_secret=None,
+        client_id="",
+        client_secret="",
         endpoint="ensign.rotational.app:443",
         insecure=False,
         auth_url="https://auth.rotational.app",
@@ -38,9 +38,9 @@ class Ensign:
             The URL of the Ensign authentication server.
         """
 
-        if client_id is None:
+        if not client_id or client_id == "":
             client_id = os.environ.get("ENSIGN_CLIENT_ID")
-        if client_secret is None:
+        if not client_secret or client_secret == "":
             client_secret = os.environ.get("ENSIGN_CLIENT_SECRET")
         if client_id is None:
             raise ValueError(
@@ -83,7 +83,7 @@ class Ensign:
                 raise EnsignResponseType(f"unexpected response type: {rep_type}")
         return errors
 
-    def subscribe(self, topics):
+    def subscribe(self, topic_ids, consumer_id="", consumer_group=None):
         """
         Subscribe to events from the Ensign server.
 
@@ -98,5 +98,76 @@ class Ensign:
             The events received from the Ensign server.
         """
 
-        for event in self.client.subscribe(topics):
+        for event in self.client.subscribe(topic_ids, consumer_id, consumer_group):
             yield event
+
+    def get_topics(self):
+        """
+        Get all topics.
+
+        Yields
+        ------
+        api.v1beta1.topic_pb2.Topic
+            The topics.
+        """
+
+        topics = []
+        page = None
+        token = ""
+        while page is None or token != "":
+            page, token = self.client.list_topics(next_page_token=token)
+            topics.extend(page)
+        return topics
+
+    def create_topic(self, topic):
+        """
+        Create a topic.
+
+        Parameters
+        ----------
+        topic : api.v1beta1.topic_pb2.Topic
+            The topic to create.
+
+        Returns
+        -------
+        api.v1beta1.topic_pb2.Topic
+            The topic that was created.
+        """
+
+        created = self.client.create_topic(topic)
+        if not created:
+            raise EnsignTopicCreateError("topic creation failed")
+        return created
+
+    def retrieve_topic(self, id):
+        raise NotImplementedError
+
+    def archive_topic(self, id):
+        raise NotImplementedError
+
+    def destroy_topic(self, id):
+        raise NotImplementedError
+
+    def topic_names(self):
+        raise NotImplementedError
+
+    def topic_exists(self, name):
+        """
+        Check if a topic exists by name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the topic to check.
+
+        Returns
+        -------
+        bool
+            True if the topic exists, False otherwise.
+        """
+
+        _, exists = self.client.topic_exists(topic_name=name)
+        return exists
+
+    def status(self):
+        raise NotImplementedError
