@@ -68,9 +68,9 @@ class Client:
             yield rep
 
     # TODO: Subscribe should not block
-    def subscribe(self, topics, consumer_id="", consumer_group=None):
+    def subscribe(self, topic_ids, consumer_id="", consumer_group=None):
         open_stream = ensign_pb2.OpenStream(
-            topics=topics, consumer_id=consumer_id, group=consumer_group
+            topics=topic_ids, consumer_id=consumer_id, group=consumer_group
         )
         subscription = ensign_pb2.Subscription(open_stream=open_stream)
         for event in self.stub.Subscribe(iter([subscription])):
@@ -111,7 +111,7 @@ class Client:
         rep = self.stub.TopicNames(params)
         return rep.topic_names, rep.next_page_token
 
-    def topic_exists(self, topic_id, project_id, topic_name):
+    def topic_exists(self, topic_id=None, project_id=None, topic_name=""):
         params = topic_pb2.TopicName(
             topic_id=topic_id, project_id=project_id, name=topic_name
         )

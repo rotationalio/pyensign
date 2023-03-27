@@ -163,7 +163,7 @@ class TestClient:
             assert isinstance(rep, ensign_pb2.Publication)
 
     def test_subscribe(self, client):
-        for rep in client.subscribe(topics=["expresso", "arabica"]):
+        for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
             assert isinstance(rep, event_pb2.Event)
 
     def test_list_topics(self, client):
