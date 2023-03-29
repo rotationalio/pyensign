@@ -1,5 +1,6 @@
 import os
 import pytest
+import asyncio
 from ulid import ULID
 from pytest_httpserver import HTTPServer
 
@@ -37,6 +38,21 @@ def grpc_add_to_server():
 @pytest.fixture(scope="module")
 def grpc_servicer():
     return MockServicer()
+
+
+@pytest.fixture(scope="module")
+def grpc_create_channel(request, grpc_addr, grpc_server):
+    def _create_channel():
+        from grpc.experimental import aio
+
+        return aio.insecure_channel(grpc_addr)
+
+    return _create_channel
+
+
+@pytest.fixture(scope="module")
+def grpc_channel(grpc_create_channel):
+    return grpc_create_channel()
 
 
 @pytest.fixture(scope="module")
@@ -149,95 +165,109 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         )
 
 
+@pytest.mark.asyncio
 class TestClient:
     """
     Test that the client uses the stub correctly.
     """
 
-    def test_publish(self, client):
+    async def test_publish(self, client):
         events = [
             event_pb2.Event(id="1"),
             event_pb2.Event(id="2"),
         ]
-        for rep in client.publish(iter(events)):
+        async for rep in client.publish(iter(events)):
             assert isinstance(rep, ensign_pb2.Publication)
 
-    def test_subscribe(self, client):
-        for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
+    async def test_subscribe(self, client):
+        async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
             assert isinstance(rep, event_pb2.Event)
 
-    def test_list_topics(self, client):
-        topics, next_page_token = client.list_topics()
+    async def test_pub_sub(self, client):
+        events = [
+            event_pb2.Event(id="1"),
+            event_pb2.Event(id="2"),
+        ]
+        async for rep in client.publish(iter(events)):
+            await asyncio.sleep(0.01)
+            assert isinstance(rep, ensign_pb2.Publication)
+
+        async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
+            await asyncio.sleep(0.01)
+            assert isinstance(rep, event_pb2.Event)
+
+    async def test_list_topics(self, client):
+        topics, next_page_token = await client.list_topics()
         assert len(topics) == 2
         assert next_page_token == "next"
 
-    def test_create_topic(self, client):
+    async def test_create_topic(self, client):
         id = ULID().bytes
-        topic = client.create_topic(topic_pb2.Topic(id=id))
+        topic = await client.create_topic(topic_pb2.Topic(id=id))
         assert topic.id == id
 
-    def test_retrieve_topic(self, client):
+    async def test_retrieve_topic(self, client):
         id = ULID().bytes
-        topic = client.retrieve_topic(id)
+        topic = await client.retrieve_topic(id)
         assert topic.id == id
 
-    def test_archive_topic(self, client):
-        id, state = client.archive_topic("1")
+    async def test_archive_topic(self, client):
+        id, state = await client.archive_topic("1")
         assert id == "1"
         assert isinstance(state, int)
 
-    def test_destroy_topic(self, client):
-        id, state = client.destroy_topic("1")
+    async def test_destroy_topic(self, client):
+        id, state = await client.destroy_topic("1")
         assert id == "1"
         assert isinstance(state, int)
 
-    def test_topic_names(self, client):
-        names, next_page_token = client.topic_names()
+    async def test_topic_names(self, client):
+        names, next_page_token = await client.topic_names()
         assert len(names) == 2
         assert next_page_token == "next"
 
-    def test_topic_exists(self, client):
-        query, exists = client.topic_exists("topic_id", "project_id", "expresso")
+    async def test_topic_exists(self, client):
+        query, exists = await client.topic_exists("topic_id", "project_id", "expresso")
         assert query == "query"
         assert exists is True
 
-    def test_status(self, client):
-        status, version, uptime, not_before, not_after = client.status()
+    async def test_status(self, client):
+        status, version, uptime, not_before, not_after = await client.status()
         assert status is not None
         assert version is not None
         assert uptime is not None
         assert not_before is not None
         assert not_after is not None
 
-    def test_insecure(self, live, ensignserver):
+    async def test_insecure(self, live, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
         if not ensignserver:
             pytest.fail("ENSIGN_SERVER environment variable not set")
 
         ensign = Client(Connection(ensignserver, insecure=True))
-        status, version, uptime, not_before, not_after = ensign.status()
+        status, version, uptime, not_before, not_after = await ensign.status()
         assert status is not None
         assert version is not None
         assert uptime is not None
         assert not_before is not None
         assert not_after is not None
 
-    def test_status_live(self, live, ensignserver):
+    async def test_status_live(self, live, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
         if not ensignserver:
             pytest.fail("ENSIGN_SERVER environment variable not set")
 
         ensign = Client(Connection(ensignserver))
-        status, version, uptime, not_before, not_after = ensign.status()
+        status, version, uptime, not_before, not_after = await ensign.status()
         assert status is not None
         assert version is not None
         assert uptime is not None
         assert not_before is not None
         assert not_after is not None
 
-    def test_auth_endpoint(self, live, ensignserver, authserver, creds):
+    async def test_auth_endpoint(self, live, ensignserver, authserver, creds):
         if not live:
             pytest.skip("Skipping live test")
         if not ensignserver:
@@ -250,6 +280,6 @@ class TestClient:
             )
 
         ensign = Client(Connection(ensignserver, auth=AuthClient(authserver, creds)))
-        topics, next_page_token = ensign.list_topics()
+        topics, next_page_token = await ensign.list_topics()
         assert topics is not None
         assert next_page_token is not None
