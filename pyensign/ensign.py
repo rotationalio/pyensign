@@ -60,7 +60,7 @@ class Ensign:
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
         self.client = Client(connection)
 
-    def publish(self, events):
+    async def publish(self, events):
         """
         Publish events to the Ensign server.
 
@@ -71,7 +71,7 @@ class Ensign:
         """
 
         errors = []
-        for publication in self.client.publish(events):
+        async for publication in self.client.publish(events):
             rep_type = publication.WhichOneof("embed")
             if rep_type == "ack":
                 continue
@@ -83,14 +83,20 @@ class Ensign:
                 raise EnsignResponseType(f"unexpected response type: {rep_type}")
         return errors
 
-    def subscribe(self, topic_ids, consumer_id="", consumer_group=None):
+    async def subscribe(self, topic_ids, consumer_id="", consumer_group=None):
         """
         Subscribe to events from the Ensign server.
 
         Parameters
         ----------
-        topics : iterable of api.v1beta1.topic_pb2.Topic
-            The topics to subscribe to.
+        topic_ids : list of str
+            The topic IDs to subscribe to.
+
+        consumer_id : str (optional)
+            The consumer ID to use for the subscriber.
+
+        consumer_group : api.v1beta1.groups.ConsumerGroup (optional)
+            The consumer group to use for the subscriber.
 
         Yields
         ------
@@ -98,10 +104,15 @@ class Ensign:
             The events received from the Ensign server.
         """
 
-        for event in self.client.subscribe(topic_ids, consumer_id, consumer_group):
+        if len(topic_ids) == 0:
+            raise ValueError("no topic IDs provided")
+
+        async for event in self.client.subscribe(
+            topic_ids, consumer_id, consumer_group
+        ):
             yield event
 
-    def get_topics(self):
+    async def get_topics(self):
         """
         Get all topics.
 
@@ -115,11 +126,11 @@ class Ensign:
         page = None
         token = ""
         while page is None or token != "":
-            page, token = self.client.list_topics(next_page_token=token)
+            page, token = await self.client.list_topics(next_page_token=token)
             topics.extend(page)
         return topics
 
-    def create_topic(self, topic):
+    async def create_topic(self, topic):
         """
         Create a topic.
 
@@ -134,24 +145,24 @@ class Ensign:
             The topic that was created.
         """
 
-        created = self.client.create_topic(topic)
+        created = await self.client.create_topic(topic)
         if not created:
             raise EnsignTopicCreateError("topic creation failed")
         return created
 
-    def retrieve_topic(self, id):
+    async def retrieve_topic(self, id):
         raise NotImplementedError
 
-    def archive_topic(self, id):
+    async def archive_topic(self, id):
         raise NotImplementedError
 
-    def destroy_topic(self, id):
+    async def destroy_topic(self, id):
         raise NotImplementedError
 
-    def topic_names(self):
+    async def topic_names(self):
         raise NotImplementedError
 
-    def topic_exists(self, name):
+    async def topic_exists(self, name):
         """
         Check if a topic exists by name.
 
@@ -166,8 +177,8 @@ class Ensign:
             True if the topic exists, False otherwise.
         """
 
-        _, exists = self.client.topic_exists(topic_name=name)
+        _, exists = await self.client.topic_exists(topic_name=name)
         return exists
 
-    def status(self):
+    async def status(self):
         raise NotImplementedError

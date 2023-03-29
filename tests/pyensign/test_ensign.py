@@ -1,6 +1,7 @@
 import os
 import json
 import pytest
+import asyncio
 from ulid import ULID
 from unittest import mock
 
@@ -64,7 +65,8 @@ class TestEnsign:
         with pytest.raises(exception), mock.patch.dict(os.environ, {}, clear=True):
             Ensign(client_id=client_id, client_secret=client_secret)
 
-    def test_live_pubsub(self, live, authserver, ensignserver):
+    @pytest.mark.asyncio
+    async def test_live_pubsub(self, live, authserver, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
         if not authserver:
@@ -77,24 +79,37 @@ class TestEnsign:
         # Get or create the topic
         name = "pyensign-pub-sub"
         topic_id = ""
-        if not ensign.topic_exists(name):
+        if not await ensign.topic_exists(name):
             topic = topic_pb2.Topic(name=name)
-            ensign.create_topic(topic)
+            await ensign.create_topic(topic)
             topic_id = str(ULID.from_bytes(topic.id))
         else:
-            topics = ensign.get_topics()
-            print(topics)
+            topics = await ensign.get_topics()
             for t in topics:
                 if t.name == name:
                     topic_id = str(ULID.from_bytes(t.id))
                     break
 
+        # Create an event
         data = json.dumps({"foo": "bar"}).encode("utf-8")
         type = event_pb2.Type(name="Generic", version=1)
         event = event_pb2.Event(
             topic_id=topic_id, data=data, mimetype=MIME.APPLICATION_JSON, type=type
         )
-        errors = ensign.publish(iter([event]))
-        assert len(errors) == 0
 
-        # TODO: Test subscribe
+        # Run publish and subscribe as coroutines
+        async def pub():
+            # Delay the publisher to prevent deadlock
+            await asyncio.sleep(1)
+            return await ensign.publish(iter([event]))
+
+        async def sub():
+            async for event in ensign.subscribe([topic_id]):
+                return event
+
+        errors, event = await asyncio.gather(pub(), sub())
+        assert len(errors) == 0
+        assert event.data == data
+        assert event.mimetype == MIME.APPLICATION_JSON
+        assert event.type.name == "Generic"
+        assert event.type.version == 1
