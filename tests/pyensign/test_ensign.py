@@ -99,7 +99,7 @@ class TestEnsign:
 
         # Run publish and subscribe as coroutines
         async def pub():
-            # Allow the subscriber to start before publishing to prevent deadlock
+            # Delay the publisher to prevent deadlock
             await asyncio.sleep(1)
             return await ensign.publish(iter([event]))
 
