@@ -1,0 +1,12 @@
+include *.md
+include *.txt
+include *.cfg
+include Makefile
+include MANIFEST.in
+
+graft pyensign
+graft tests
+
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude .env
