@@ -2,6 +2,7 @@ import os
 import pytest
 import asyncio
 from ulid import ULID
+from grpc import RpcError
 from pytest_httpserver import HTTPServer
 
 from pyensign.connection import Client
@@ -72,6 +73,14 @@ def creds():
         "client_id": os.environ.get("ENSIGN_CLIENT_ID"),
         "client_secret": os.environ.get("ENSIGN_CLIENT_SECRET"),
     }
+
+
+@pytest.fixture
+def rpc_error_coro():
+    async def coro():
+        raise RpcError("error")
+
+    return coro
 
 
 class TestConnection:
