@@ -96,7 +96,6 @@ class Ensign:
 
         errors = []
         async for publication in self.client.publish(next()):
-            print(publication)
             rep_type = publication.WhichOneof("embed")
             if rep_type == "ack":
                 continue
@@ -106,7 +105,6 @@ class Ensign:
                 break
             else:
                 raise EnsignResponseType(f"unexpected response type: {rep_type}")
-        print("stream closed")
         return errors
 
     async def subscribe(self, *topic_ids, consumer_id="", consumer_group=None):
