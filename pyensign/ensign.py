@@ -1,7 +1,9 @@
 import os
+from ulid import ULID
 
 from pyensign.connection import Client
 from pyensign.connection import Connection
+from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
 from pyensign.exceptions import EnsignResponseType, EnsignTopicCreateError
 
@@ -60,18 +62,41 @@ class Ensign:
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
         self.client = Client(connection)
 
-    async def publish(self, events):
+    async def publish(self, topic_name, *events):
         """
-        Publish events to the Ensign server.
+        Publish events to an Ensign topic.
 
         Parameters
         ----------
-        events : iterable of api.v1beta1.event_pb2.Event
+        topic_name : str
+            The name of the topic to publish events to.
+
+        events : iterable of events
             The events to publish.
         """
 
+        if topic_name == "":
+            raise ValueError("topic_name is required")
+
+        if len(events) == 0:
+            raise ValueError("no events provided")
+
+        # Get the topic ID from the topic name
+        topic_id = await self.topic_id(topic_name)
+
+        # Ensure the topic exists
+        if topic_id == "":
+            topic = await self.create_topic(topic_name)
+            topic_id = str(ULID.from_bytes(topic.id))
+
+        # TODO: Support user-defined generators
+        def next():
+            for event in events:
+                yield event.proto(topic_id)
+
         errors = []
-        async for publication in self.client.publish(events):
+        async for publication in self.client.publish(next()):
+            print(publication)
             rep_type = publication.WhichOneof("embed")
             if rep_type == "ack":
                 continue
@@ -81,15 +106,16 @@ class Ensign:
                 break
             else:
                 raise EnsignResponseType(f"unexpected response type: {rep_type}")
+        print("stream closed")
         return errors
 
-    async def subscribe(self, topic_ids, consumer_id="", consumer_group=None):
+    async def subscribe(self, *topic_ids, consumer_id="", consumer_group=None):
         """
         Subscribe to events from the Ensign server.
 
         Parameters
         ----------
-        topic_ids : list of str
+        topic_ids : iterable of str
             The topic IDs to subscribe to.
 
         consumer_id : str (optional)
@@ -130,14 +156,14 @@ class Ensign:
             topics.extend(page)
         return topics
 
-    async def create_topic(self, topic):
+    async def create_topic(self, topic_name):
         """
         Create a topic.
 
         Parameters
         ----------
-        topic : api.v1beta1.topic_pb2.Topic
-            The topic to create.
+        topic_name : api.v1beta1.topic_pb2.Topic
+            The name for the new topic, must be unique.
 
         Returns
         -------
@@ -145,7 +171,7 @@ class Ensign:
             The topic that was created.
         """
 
-        created = await self.client.create_topic(topic)
+        created = await self.client.create_topic(topic_pb2.Topic(name=topic_name))
         if not created:
             raise EnsignTopicCreateError("topic creation failed")
         return created
@@ -157,10 +183,56 @@ class Ensign:
         raise NotImplementedError
 
     async def destroy_topic(self, id):
-        raise NotImplementedError
+        """
+        Completely destroy a topic including all of its data. This operation is
+        asynchronous so it may take some time for the topic to be destroyed.
+
+        Caution! This operation is irreversible.
+
+        Parameters
+        ----------
+        id : str
+            The ID of the topic to destroy.
+
+        Returns
+        -------
+        bool
+            True if the request was accepted, False otherwise.
+        """
+
+        _, state = await self.client.destroy_topic(id)
+        return state == topic_pb2.TopicTombstone.Status.DELETING
 
     async def topic_names(self):
         raise NotImplementedError
+
+    async def topic_id(self, name):
+        """
+        Get the ID of a topic by name.
+
+        Parameters
+        ----------
+        name: str
+            The name of the topic.
+
+        Returns
+        -------
+        str
+            The ID of the topic or None.
+        """
+
+        # TODO: cache topic IDs to avoid repeated API calls
+
+        page = None
+        token = ""
+        while page is None or token != "":
+            # TODO: We could use topic_names but it currently requires hashing the
+            # topic name with murmur3.
+            page, token = await self.client.list_topics(next_page_token=token)
+            for topic in page:
+                if topic.name == name:
+                    return str(ULID(topic.id))
+        return ""
 
     async def topic_exists(self, name):
         """
@@ -181,4 +253,14 @@ class Ensign:
         return exists
 
     async def status(self):
-        raise NotImplementedError
+        """
+        Check the status of the Ensign server.
+
+        Returns
+        -------
+        str
+            Status of the server.
+        """
+
+        status, version, uptime, _, _ = await self.client.status()
+        return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
