@@ -4,8 +4,7 @@ include *.cfg
 include Makefile
 include MANIFEST.in
 
-graft pyensign
-graft tests
+recursive-include pyensign/ *.py
 
 global-exclude __pycache__
 global-exclude *.pyc
