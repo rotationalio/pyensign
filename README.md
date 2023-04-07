@@ -3,18 +3,10 @@ Welcome to pyensign!
 
 This repository contains the Ensign driver, SDK, and helpers for Python. For the main ensign repo, go [here](https://github.com/rotationalio/ensign). We also have SDKs for [Javascript](https://github.com/rotationalio/ensignjs) and [Go](https://github.com/rotationalio/goensign).
 
-## Dependencies
-
-The project dependencies can be installed with pip.
+## Installation
 
 ```
-$ pip install -r requirements.txt
-```
-
-If you wish to run the tests, you must install the test dependencies instead.
-
-```
-$ pip install -r tests/requirements.txt
+pip install pyensign
 ```
 
 ## Configuration
@@ -87,4 +79,18 @@ Then run make to build the protocol buffers from the .proto definitions.
 
 ```
 $ make grpc
+```
+
+## Running the tests
+
+If you wish to run the tests, you must first install the test dependencies.
+
+```
+$ pip install -r tests/requirements.txt
+```
+
+Then run the tests using pytest.
+
+```
+$ python -m pytest
 ```
