@@ -32,9 +32,9 @@ from pyensign.events import Event
 event = Event(b'{"temp": 72, "units": "fahrenheit"}', "APPLICATION_JSON")
 await client.publish("weather", event)
 
-# Publishing mulitple events
+# Publishing multiple events
 events = [
-    Event(b'{"temp": 72, "units": "fahrenheit"}', "APPLICATION_JSON")
+    Event(b'{"temp": 72, "units": "fahrenheit"}', "APPLICATION_JSON"),
     Event(b'{"temp": 76, "units": "fahrenheit"}', "APPLICATION_JSON")
 ]
 await client.publish("weather", events)
