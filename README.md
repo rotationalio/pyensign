@@ -5,7 +5,7 @@ This repository contains the Ensign driver, SDK, and helpers for Python. For the
 
 ## Installation
 
-PyEnsign is compatible with Python 3.4 or later. The simplest way to install PyEnsign and its dependencies is from PyPI with pip, Python's preferred package installer.
+PyEnsign is compatible with Python >= 3.7 (Note: we can't guarantee PyEnsign's compatibility with earlier versions of Python due to PyEnsign's dependence on the [`grpcio` package](https://pypi.org/project/grpcio/)). The simplest way to install PyEnsign and its dependencies is from PyPI with pip, Python's preferred package installer.
 
 ```
 pip install pyensign

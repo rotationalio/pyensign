@@ -52,7 +52,6 @@ Here's a handy checklist to go through before submitting a PR, note that you can
 -->
 
 - [ ] _Is the commit message formatted correctly?_
-- [ ] _Have you noted the new functionality/bugfix in the release notes of the next release?_
 
 <!-- If you've changed any code -->
 

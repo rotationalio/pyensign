@@ -11,7 +11,7 @@ A clear and concise description of what the bug is.
 
 ```python
 # Steps to reproduce the behavior (code snippet):
-# Should include imports, dataset loading, and execution
+# Should include imports, any external dependencies, and execution
 # Add the traceback below
 ```
 
