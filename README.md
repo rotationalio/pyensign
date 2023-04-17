@@ -5,6 +5,8 @@ This repository contains the Ensign driver, SDK, and helpers for Python. For the
 
 ## Installation
 
+PyEnsign is compatible with Python >= 3.7 (Note: we can't guarantee PyEnsign's compatibility with earlier versions of Python due to PyEnsign's dependence on the [`grpcio` package](https://pypi.org/project/grpcio/)). The simplest way to install PyEnsign and its dependencies is from PyPI with pip, Python's preferred package installer.
+
 ```
 pip install pyensign
 ```
@@ -21,7 +23,11 @@ client = Ensign(client_id=<your client ID>, client_secret=<your client secret>)
 
 If not provided the client ID and client secret will be obtained from the `ENSIGN_CLIENT_ID` and `ENSIGN_CLIENT_SECRET` environment variables.
 
-## Publishing
+## Getting to know the PyEnsign API
+
+The sample code below describes some of the core PyEnsign API, but if you're looking for a minimal end-to-example, [check this out first](https://github.com/rotationalio/ensign-examples/tree/main/python/minimal).
+
+### Publishing
 
 Use `Ensign.publish()` to publish events to a topic. All events must contain some data and a mimetype. If the topic doesn't exist in your project, it will be automatically created.
 
@@ -40,7 +46,7 @@ events = [
 await client.publish("weather", events)
 ```
 
-## Subscribing
+### Subscribing
 
 Use `Ensign.subscribe()` to subscribe to one or more topics.
 
@@ -49,7 +55,7 @@ async for event in client.subscribe("weather", "forecast")
     print("Received event: {}".format(event))
 ```
 
-## Design patterns
+### Design patterns
 
 Most event-driven applications require some form of concurrency. Therefore, the `Ensign` class is designed to be used asynchronously by defining coroutines. You can use Python's builtin `asyncio` package to schedule and run coroutines from the main thread.
 
@@ -67,30 +73,12 @@ def main():
     asyncio.run(subscribe(topic))
 ```
 
-## Building the protocol buffers
+## Contributing to PyEnsign
 
-This repo relies on [protocol buffers](https://protobuf.dev/) for code generation. If you need to rebuild the protocol buffers, clone the ensign repo to the parent directory.
+Wow, you want to contribute to PyEnsign? 😍 We would absolutely love that!
 
-```bash
-$ git clone git@github.com:rotationalio/ensign.git ../ensign
-```
+PyEnsign is an open source project that is supported by a community who will gratefully and humbly accept any contributions you might make to the project. Large or small, any contribution makes a big difference; and if you've never contributed to an open source project before, we hope you will start with PyEnsign!
 
-Then run make to build the protocol buffers from the .proto definitions.
+Please check out our Contributor's Guide in `CONTRIBUTING.md` to get a quick orientation first.
 
-```
-$ make grpc
-```
-
-## Running the tests
-
-If you wish to run the tests, you must first install the test dependencies.
-
-```
-$ pip install -r tests/requirements.txt
-```
-
-Then run the tests using pytest.
-
-```
-$ python -m pytest
-```
+We can't wait to hear from you!
