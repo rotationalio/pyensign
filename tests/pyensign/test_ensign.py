@@ -34,6 +34,16 @@ def ensign():
     return Ensign(client_id="id", client_secret="secret", endpoint="localhost:1234")
 
 
+@pytest.fixture()
+def ensign_no_cache():
+    return Ensign(
+        client_id="id",
+        client_secret="secret",
+        endpoint="localhost:1234",
+        disable_topic_cache=True,
+    )
+
+
 def async_iter(items):
     async def next():
         for item in items:
@@ -221,6 +231,15 @@ class TestEnsign:
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
+    async def test_topic_id_no_cache(self, mock_list, ensign_no_cache):
+        id = ULID()
+        topics = [topic_pb2.Topic(id=id.bytes, name="otters")]
+        mock_list.return_value = (topics, "")
+        actual = await ensign_no_cache.topic_id("otters")
+        assert actual == str(id)
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.list_topics")
     async def test_topic_id_error(self, mock_list, ensign):
         mock_list.return_value = ([], "")
         with pytest.raises(EnsignTopicNotFoundError):
@@ -237,6 +256,13 @@ class TestEnsign:
         ensign.topics.add("otters", ULID().bytes)
         mock_exists.return_value = (None, False)
         exists = await ensign.topic_exists("otters")
+        assert exists
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.topic_exists")
+    async def test_topic_exists_no_cache(self, mock_exists, ensign_no_cache):
+        mock_exists.return_value = (None, True)
+        exists = await ensign_no_cache.topic_exists("otters")
         assert exists
 
     @pytest.mark.asyncio

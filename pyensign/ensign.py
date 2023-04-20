@@ -238,10 +238,11 @@ class Ensign:
         """
 
         # Attempt to get the topic ID from the cache
-        try:
-            return self.topics.get(name)
-        except CacheMissError:
-            pass
+        if self.topics is not None:
+            try:
+                return self.topics.get(name)
+            except CacheMissError:
+                pass
 
         # Get the topic ID from Ensign
         page = None
@@ -253,7 +254,8 @@ class Ensign:
             for topic in page:
                 if topic.name == name:
                     id = str(ULID(topic.id))
-                    self.topics.add(name, id)
+                    if self.topics is not None:
+                        self.topics.add(name, id)
                     return id
         raise EnsignTopicNotFoundError(f"topic not found by name: {name}")
 
@@ -273,7 +275,7 @@ class Ensign:
         """
 
         # Attempt to check existence using the cache
-        if self.topics.exists(name):
+        if self.topics is not None and self.topics.exists(name):
             return True
 
         # Check existence using Ensign
