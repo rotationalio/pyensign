@@ -10,7 +10,7 @@ from pyensign.events import Event
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import event_pb2
 from pyensign.api.v1beta1 import topic_pb2
-from pyensign.exceptions import EnsignTopicCreateError
+from pyensign.exceptions import EnsignTopicCreateError, EnsignTopicNotFoundError
 from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
 
 
@@ -204,6 +204,40 @@ class TestEnsign:
         )
         success = await ensign.destroy_topic("otters")
         assert not success
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.list_topics")
+    async def test_topic_id(self, mock_list, ensign):
+        id = ULID()
+        topics = [topic_pb2.Topic(id=id.bytes, name="otters")]
+        mock_list.return_value = (topics, "")
+        actual = await ensign.topic_id("otters")
+        assert actual == str(id)
+
+        # Test that the cached value is used on subsequent calls
+        mock_list.return_value = ([], "")
+        actual = await ensign.topic_id("otters")
+        assert actual == str(id)
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.list_topics")
+    async def test_topic_id_error(self, mock_list, ensign):
+        mock_list.return_value = ([], "")
+        with pytest.raises(EnsignTopicNotFoundError):
+            await ensign.topic_id("otters")
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.topic_exists")
+    async def test_topic_exists(self, mock_exists, ensign):
+        mock_exists.return_value = (None, True)
+        exists = await ensign.topic_exists("otters")
+        assert exists
+
+        # Test that the cache is checked first
+        ensign.topics.add("otters", ULID().bytes)
+        mock_exists.return_value = (None, False)
+        exists = await ensign.topic_exists("otters")
+        assert exists
 
     @pytest.mark.asyncio
     async def test_live_pubsub(self, live, authserver, ensignserver):
