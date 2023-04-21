@@ -2,10 +2,16 @@ import os
 from ulid import ULID
 
 from pyensign.connection import Client
+from pyensign.utils.cache import Cache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
-from pyensign.exceptions import EnsignResponseType, EnsignTopicCreateError
+from pyensign.exceptions import (
+    CacheMissError,
+    EnsignResponseType,
+    EnsignTopicCreateError,
+    EnsignTopicNotFoundError,
+)
 
 
 class Ensign:
@@ -20,6 +26,7 @@ class Ensign:
         endpoint="ensign.rotational.app:443",
         insecure=False,
         auth_url="https://auth.rotational.app",
+        disable_topic_cache=False,
     ):
         """
         Create a new Ensign client with API credentials.
@@ -38,6 +45,8 @@ class Ensign:
             Set to True to use an insecure connection.
         auth_url : str (optional)
             The URL of the Ensign authentication server.
+        disable_topic_cache: bool (optional)
+            Set to True to disable topic ID caching.
         """
 
         if not client_id or client_id == "":
@@ -62,6 +71,11 @@ class Ensign:
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
         self.client = Client(connection)
 
+        if disable_topic_cache:
+            self.topics = None
+        else:
+            self.topics = Cache()
+
     async def publish(self, topic_name, *events):
         """
         Publish events to an Ensign topic.
@@ -81,11 +95,11 @@ class Ensign:
         if len(events) == 0:
             raise ValueError("no events provided")
 
-        # Get the topic ID from the topic name
-        topic_id = await self.topic_id(topic_name)
-
-        # Ensure the topic exists
-        if topic_id == "":
+        # Ensure the topic ID exists by getting or creating it
+        topic_id = ""
+        try:
+            topic_id = await self.topic_id(topic_name)
+        except EnsignTopicNotFoundError:
             topic = await self.create_topic(topic_name)
             topic_id = str(ULID.from_bytes(topic.id))
 
@@ -216,11 +230,21 @@ class Ensign:
         Returns
         -------
         str
-            The ID of the topic or None.
+            The ID of the topic.
+
+        Raises
+        ------
+        EnsignTopicNotFoundError
         """
 
-        # TODO: cache topic IDs to avoid repeated API calls
+        # Attempt to get the topic ID from the cache
+        if self.topics is not None:
+            try:
+                return self.topics.get(name)
+            except CacheMissError:
+                pass
 
+        # Get the topic ID from Ensign
         page = None
         token = ""
         while page is None or token != "":
@@ -229,8 +253,11 @@ class Ensign:
             page, token = await self.client.list_topics(next_page_token=token)
             for topic in page:
                 if topic.name == name:
-                    return str(ULID(topic.id))
-        return ""
+                    id = str(ULID(topic.id))
+                    if self.topics is not None:
+                        self.topics.add(name, id)
+                    return id
+        raise EnsignTopicNotFoundError(f"topic not found by name: {name}")
 
     async def topic_exists(self, name):
         """
@@ -247,6 +274,11 @@ class Ensign:
             True if the topic exists, False otherwise.
         """
 
+        # Attempt to check existence using the cache
+        if self.topics is not None and self.topics.exists(name):
+            return True
+
+        # Check existence using Ensign
         _, exists = await self.client.topic_exists(topic_name=name)
         return exists
 

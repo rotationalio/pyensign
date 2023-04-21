@@ -111,6 +111,14 @@ class AuthenticationError(PyEnsignError):
     pass
 
 
+class CacheMissError(PyEnsignError):
+    """
+    Raised when PyEnsign fails to find a cached value
+    """
+
+    pass
+
+
 class EnsignError(PyEnsignError):
     """
     Raised when PyEnsign receives an error from the Ensign server
@@ -146,6 +154,14 @@ class EnsignAttributeError(EnsignError, AttributeError):
 class EnsignTopicCreateError(EnsignError):
     """
     Raised when Ensign failed to create a topic
+    """
+
+    pass
+
+
+class EnsignTopicNotFoundError(EnsignError):
+    """
+    Raised when a topic could not be retrieved from Ensign
     """
 
     pass
