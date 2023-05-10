@@ -135,9 +135,9 @@ class EnsignRPCError(EnsignError):
     pass
 
 
-class EnsignResponseType(EnsignError):
+class EnsignTypeError(EnsignError, TypeError):
     """
-    Raised when PyEnsign receives an unexpected message type from the Ensign server
+    Raised when PyEnsign receives an unexpected type in a response message
     """
 
     pass

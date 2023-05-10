@@ -12,6 +12,7 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
+from pyensign.region.v1beta1 import region_pb2 as region_dot_v1beta1_dot_region__pb2
 from pyensign.mimetype.v1beta1 import (
     mimetype_pb2 as mimetype_dot_v1beta1_dot_mimetype__pb2,
 )
@@ -19,7 +20,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x17\x61pi/v1beta1/event.proto\x12\x0e\x65nsign.v1beta1\x1a\x1fmimetype/v1beta1/mimetype.proto\x1a\x1fgoogle/protobuf/timestamp.proto"\xbe\x03\n\x05\x45vent\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08topic_id\x18\x02 \x01(\t\x12(\n\x08mimetype\x18\x03 \x01(\x0e\x32\x16.mimetype.v1beta1.MIME\x12"\n\x04type\x18\x04 \x01(\x0b\x32\x14.ensign.v1beta1.Type\x12\x0b\n\x03key\x18\x05 \x01(\x0c\x12\x0c\n\x04\x64\x61ta\x18\x06 \x01(\x0c\x12.\n\nencryption\x18\x07 \x01(\x0b\x32\x1a.ensign.v1beta1.Encryption\x12\x30\n\x0b\x63ompression\x18\x08 \x01(\x0b\x32\x1b.ensign.v1beta1.Compression\x12)\n\tgeography\x18\t \x01(\x0b\x32\x16.ensign.v1beta1.Region\x12,\n\tpublisher\x18\n \x01(\x0b\x32\x19.ensign.v1beta1.Publisher\x12\x17\n\x0fuser_defined_id\x18\x0b \x01(\t\x12+\n\x07\x63reated\x18\x0e \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12-\n\tcommitted\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp"%\n\x04Type\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\r"/\n\nEncryption\x12\x11\n\talgorithm\x18\x01 \x01(\t\x12\x0e\n\x06key_id\x18\x02 \x01(\t" \n\x0b\x43ompression\x12\x11\n\talgorithm\x18\x02 \x01(\t"\x16\n\x06Region\x12\x0c\n\x04name\x18\x01 \x01(\t".\n\tPublisher\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x0e\n\x06ipaddr\x18\x02 \x01(\tb\x06proto3'
+    b'\n\x17\x61pi/v1beta1/event.proto\x12\x0e\x65nsign.v1beta1\x1a\x1bregion/v1beta1/region.proto\x1a\x1fmimetype/v1beta1/mimetype.proto\x1a\x1fgoogle/protobuf/timestamp.proto"\xdd\x02\n\x0c\x45ventWrapper\x12\n\n\x02id\x18\x01 \x01(\x0c\x12\x10\n\x08topic_id\x18\x02 \x01(\x0c\x12\x0e\n\x06offset\x18\x03 \x01(\x04\x12\r\n\x05\x65poch\x18\x04 \x01(\x04\x12&\n\x06region\x18\x05 \x01(\x0e\x32\x16.region.v1beta1.Region\x12,\n\tpublisher\x18\x06 \x01(\x0b\x32\x19.ensign.v1beta1.Publisher\x12\x0b\n\x03key\x18\x07 \x01(\x0c\x12\r\n\x05shard\x18\x08 \x01(\x04\x12\r\n\x05\x65vent\x18\t \x01(\x0c\x12.\n\nencryption\x18\n \x01(\x0b\x32\x1a.ensign.v1beta1.Encryption\x12\x30\n\x0b\x63ompression\x18\x0b \x01(\x0b\x32\x1b.ensign.v1beta1.Compression\x12-\n\tcommitted\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp"\x91\x02\n\x05\x45vent\x12\x17\n\x0fuser_defined_id\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\x12\x35\n\x08metadata\x18\x03 \x03(\x0b\x32#.ensign.v1beta1.Event.MetadataEntry\x12(\n\x08mimetype\x18\x04 \x01(\x0e\x32\x16.mimetype.v1beta1.MIME\x12"\n\x04type\x18\x05 \x01(\x0b\x32\x14.ensign.v1beta1.Type\x12+\n\x07\x63reated\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"\xe3\x07\n\x0e\x45ventContainer\x12\x10\n\x08topic_id\x18\x01 \x01(\x0c\x12\x14\n\x0cstart_offset\x18\x02 \x01(\x04\x12\x12\n\nend_offset\x18\x03 \x01(\x04\x12:\n\x06\x65pochs\x18\x04 \x03(\x0b\x32*.ensign.v1beta1.EventContainer.EpochsEntry\x12\x0e\n\x06\x65vents\x18\x05 \x01(\x0c\x12.\n\nencryption\x18\x06 \x01(\x0b\x32\x1a.ensign.v1beta1.Encryption\x12\x30\n\x0b\x63ompression\x18\x07 \x01(\x0b\x32\x1b.ensign.v1beta1.Compression\x12\'\n\x07regions\x18\x08 \x03(\x0e\x32\x16.region.v1beta1.Region\x12\x45\n\x0cregion_index\x18\t \x03(\x0b\x32/.ensign.v1beta1.EventContainer.RegionIndexEntry\x12-\n\npublishers\x18\n \x03(\x0b\x32\x19.ensign.v1beta1.Publisher\x12K\n\x0fpublisher_index\x18\x0b \x03(\x0b\x32\x32.ensign.v1beta1.EventContainer.PublisherIndexEntry\x12\x0c\n\x04keys\x18\x0c \x03(\x0c\x12?\n\tkey_index\x18\r \x03(\x0b\x32,.ensign.v1beta1.EventContainer.KeyIndexEntry\x12\x0e\n\x06shards\x18\x0e \x03(\x04\x12\x43\n\x0bshard_index\x18\x0f \x03(\x0b\x32..ensign.v1beta1.EventContainer.ShardIndexEntry\x12+\n\x07\x63reated\x18\x1f \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08modified\x18  \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x1a-\n\x0b\x45pochsEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01\x1a\x32\n\x10RegionIndexEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a\x35\n\x13PublisherIndexEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a/\n\rKeyIndexEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\x1a\x31\n\x0fShardIndexEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01"Y\n\x04Type\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x15\n\rmajor_version\x18\x02 \x01(\r\x12\x15\n\rminor_version\x18\x03 \x01(\r\x12\x15\n\rpatch_version\x18\x04 \x01(\r"\xa0\x03\n\nEncryption\x12\x15\n\rpublic_key_id\x18\x01 \x01(\t\x12\x16\n\x0e\x65ncryption_key\x18\x02 \x01(\x0c\x12\x13\n\x0bhmac_secret\x18\x03 \x01(\x0c\x12\x11\n\tsignature\x18\x04 \x01(\x0c\x12?\n\x11sealing_algorithm\x18\x05 \x01(\x0e\x32$.ensign.v1beta1.Encryption.Algorithm\x12\x42\n\x14\x65ncryption_algorithm\x18\x06 \x01(\x0e\x32$.ensign.v1beta1.Encryption.Algorithm\x12\x41\n\x13signature_algorithm\x18\x07 \x01(\x0e\x32$.ensign.v1beta1.Encryption.Algorithm"s\n\tAlgorithm\x12\r\n\tPLAINTEXT\x10\x00\x12\x0e\n\nAES256_GCM\x10n\x12\x0e\n\nAES192_GCM\x10x\x12\x0f\n\nAES128_GCM\x10\x82\x01\x12\x10\n\x0bHMAC_SHA256\x10\xb6\x02\x12\x14\n\x0fRSA_OAEP_SHA512\x10\xfe\x03"\x9e\x01\n\x0b\x43ompression\x12\x38\n\talgorithm\x18\x01 \x01(\x0e\x32%.ensign.v1beta1.Compression.Algorithm\x12\r\n\x05level\x18\x02 \x01(\x03"F\n\tAlgorithm\x12\x08\n\x04NONE\x10\x00\x12\x08\n\x04GZIP\x10\x01\x12\x0c\n\x08\x43OMPRESS\x10\x02\x12\x0b\n\x07\x44\x45\x46LATE\x10\x03\x12\n\n\x06\x42ROTLI\x10\x04"X\n\tPublisher\x12\x14\n\x0cpublisher_id\x18\x01 \x01(\t\x12\x0e\n\x06ipaddr\x18\x02 \x01(\t\x12\x11\n\tclient_id\x18\x03 \x01(\t\x12\x12\n\nuser_agent\x18\x04 \x01(\tb\x06proto3'
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
@@ -27,16 +28,46 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "api.v1beta1.event_pb2", glo
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    _EVENT._serialized_start = 110
-    _EVENT._serialized_end = 556
-    _TYPE._serialized_start = 558
-    _TYPE._serialized_end = 595
-    _ENCRYPTION._serialized_start = 597
-    _ENCRYPTION._serialized_end = 644
-    _COMPRESSION._serialized_start = 646
-    _COMPRESSION._serialized_end = 678
-    _REGION._serialized_start = 680
-    _REGION._serialized_end = 702
-    _PUBLISHER._serialized_start = 704
-    _PUBLISHER._serialized_end = 750
+    _EVENT_METADATAENTRY._options = None
+    _EVENT_METADATAENTRY._serialized_options = b"8\001"
+    _EVENTCONTAINER_EPOCHSENTRY._options = None
+    _EVENTCONTAINER_EPOCHSENTRY._serialized_options = b"8\001"
+    _EVENTCONTAINER_REGIONINDEXENTRY._options = None
+    _EVENTCONTAINER_REGIONINDEXENTRY._serialized_options = b"8\001"
+    _EVENTCONTAINER_PUBLISHERINDEXENTRY._options = None
+    _EVENTCONTAINER_PUBLISHERINDEXENTRY._serialized_options = b"8\001"
+    _EVENTCONTAINER_KEYINDEXENTRY._options = None
+    _EVENTCONTAINER_KEYINDEXENTRY._serialized_options = b"8\001"
+    _EVENTCONTAINER_SHARDINDEXENTRY._options = None
+    _EVENTCONTAINER_SHARDINDEXENTRY._serialized_options = b"8\001"
+    _EVENTWRAPPER._serialized_start = 139
+    _EVENTWRAPPER._serialized_end = 488
+    _EVENT._serialized_start = 491
+    _EVENT._serialized_end = 764
+    _EVENT_METADATAENTRY._serialized_start = 717
+    _EVENT_METADATAENTRY._serialized_end = 764
+    _EVENTCONTAINER._serialized_start = 767
+    _EVENTCONTAINER._serialized_end = 1762
+    _EVENTCONTAINER_EPOCHSENTRY._serialized_start = 1510
+    _EVENTCONTAINER_EPOCHSENTRY._serialized_end = 1555
+    _EVENTCONTAINER_REGIONINDEXENTRY._serialized_start = 1557
+    _EVENTCONTAINER_REGIONINDEXENTRY._serialized_end = 1607
+    _EVENTCONTAINER_PUBLISHERINDEXENTRY._serialized_start = 1609
+    _EVENTCONTAINER_PUBLISHERINDEXENTRY._serialized_end = 1662
+    _EVENTCONTAINER_KEYINDEXENTRY._serialized_start = 1664
+    _EVENTCONTAINER_KEYINDEXENTRY._serialized_end = 1711
+    _EVENTCONTAINER_SHARDINDEXENTRY._serialized_start = 1713
+    _EVENTCONTAINER_SHARDINDEXENTRY._serialized_end = 1762
+    _TYPE._serialized_start = 1764
+    _TYPE._serialized_end = 1853
+    _ENCRYPTION._serialized_start = 1856
+    _ENCRYPTION._serialized_end = 2272
+    _ENCRYPTION_ALGORITHM._serialized_start = 2157
+    _ENCRYPTION_ALGORITHM._serialized_end = 2272
+    _COMPRESSION._serialized_start = 2275
+    _COMPRESSION._serialized_end = 2433
+    _COMPRESSION_ALGORITHM._serialized_start = 2363
+    _COMPRESSION_ALGORITHM._serialized_end = 2433
+    _PUBLISHER._serialized_start = 2435
+    _PUBLISHER._serialized_end = 2523
 # @@protoc_insertion_point(module_scope)
