@@ -188,6 +188,14 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     def TopicExists(self, request, context):
         return topic_pb2.TopicExistsInfo(query="query", exists=True)
 
+    def Info(self, request, context):
+        return ensign_pb2.ProjectInfo(
+            project_id=str(ULID()),
+            topics=3,
+            readonly_topics=1,
+            events=100,
+        )
+
     def Status(self, request, context):
         return ensign_pb2.ServiceState(
             status=1,
@@ -260,6 +268,14 @@ class TestClient:
         query, exists = await client.topic_exists("topic_id", "project_id", "expresso")
         assert query == "query"
         assert exists is True
+
+    async def test_info(self, client):
+        topic_ids = [ULID().bytes, ULID().bytes]
+        info = await client.info(topics=topic_ids)
+        assert ULID.from_str(info.project_id) is not None
+        assert info.topics > 0
+        assert info.readonly_topics > 0
+        assert info.events > 0
 
     async def test_status(self, client):
         status, version, uptime, not_before, not_after = await client.status()
