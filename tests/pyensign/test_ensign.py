@@ -96,13 +96,13 @@ class TestEnsign:
     @patch("pyensign.connection.Client.publish")
     async def test_publish_exists(self, mock_publish, mock_list, ensign):
         name = "otters"
-        pubs = [
-            ensign_pb2.Publication(ack=ensign_pb2.Ack()),
-            ensign_pb2.Publication(nack=ensign_pb2.Nack()),
-            ensign_pb2.Publication(close_stream=ensign_pb2.CloseStream()),
+        responses = [
+            ensign_pb2.Ack(),
+            ensign_pb2.Nack(),
         ]
-        mock_publish.return_value = async_iter(pubs)
-        mock_list.return_value = ([topic_pb2.Topic(name=name, id=ULID().bytes)], "")
+        topic_id = ULID()
+        mock_publish.return_value = async_iter(responses)
+        mock_list.return_value = ([topic_pb2.Topic(name=name, id=topic_id.bytes)], "")
 
         # Publish two events, one of them errors
         events = [
@@ -111,6 +111,11 @@ class TestEnsign:
         ]
 
         errors = await ensign.publish(name, events)
+
+        # Ensure that the publish call was made with the correct topic ID
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], ULID)
+        assert args[0] == topic_id
         assert len(errors) == 1
 
     @pytest.mark.asyncio
@@ -121,14 +126,13 @@ class TestEnsign:
         self, mock_publish, mock_create, mock_list, ensign
     ):
         name = "otters"
-        id = ULID().bytes
+        id = ULID()
         pubs = [
-            ensign_pb2.Publication(ack=ensign_pb2.Ack()),
-            ensign_pb2.Publication(nack=ensign_pb2.Nack()),
-            ensign_pb2.Publication(close_stream=ensign_pb2.CloseStream()),
+            ensign_pb2.Ack(),
+            ensign_pb2.Nack(),
         ]
         mock_publish.return_value = async_iter(pubs)
-        mock_create.return_value = topic_pb2.Topic(id=id, name=name)
+        mock_create.return_value = topic_pb2.Topic(id=id.bytes, name=name)
         mock_list.return_value = ([], "")
 
         # Publish two events, one of them errors
@@ -137,6 +141,11 @@ class TestEnsign:
             Event(b'{"bar": "bz"}', MIME.APPLICATION_JSON),
         ]
         errors = await ensign.publish(name, events)
+
+        # Ensure that the publish call was made with the correct topic ID
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], ULID)
+        assert args[0] == id
         assert len(errors) == 1
 
     @pytest.mark.asyncio
@@ -151,12 +160,12 @@ class TestEnsign:
     async def test_subscribe(self, mock_subscribe, ensign):
         events = [
             event_pb2.Event(
-                id=str(ULID()),
+                user_defined_id="1",
                 data=b'{"foo": "bar"}',
                 mimetype=MIME.APPLICATION_JSON,
             ),
             event_pb2.Event(
-                id=str(ULID()),
+                user_defined_id="2",
                 data=b'{"bar": "bz"}',
                 mimetype=MIME.APPLICATION_JSON,
             ),

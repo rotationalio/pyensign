@@ -1,10 +1,13 @@
 import grpc
 from grpc import aio
+from ulid import ULID
 
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
+from pyensign.api.v1beta1.event import wrap, unwrap
+from pyensign.exceptions import EnsignTypeError
 
 
 class Connection:
@@ -65,25 +68,65 @@ class Client:
         self.stub = ensign_pb2_grpc.EnsignStub(connection.channel)
 
     @catch_rpc_error
-    async def publish(self, events):
-        async def next():
-            for event in events:
-                yield event
+    async def publish(self, topic_id, events, client_id=""):
+        def next():
+            # First message must be an OpenStream request
+            # TODO: Should we send topics here?
+            yield ensign_pb2.PublisherRequest(
+                open_stream=ensign_pb2.OpenStream(client_id=client_id)
+            )
 
+            # The rest of the messages should be wrapped events
+            for event in events:
+                yield ensign_pb2.PublisherRequest(event=wrap(event, topic_id))
+
+        ready = False
         async for rep in self.stub.Publish(next()):
-            yield rep
+            rep_type = rep.WhichOneof("embed")
+            if not ready and rep_type != "ready":
+                raise EnsignTypeError(
+                    "expected ready response, got {}".format(rep_type)
+                )
+            if rep_type == "ready":
+                # TODO: Parse topic map from stream_ready response
+                ready = True
+            elif rep_type == "ack":
+                yield rep.ack
+            elif rep_type == "nack":
+                yield rep.nack
+            elif rep_type == "close_stream":
+                break
+            else:
+                raise EnsignTypeError(f"unexpected response type: {rep_type}")
 
     @catch_rpc_error
-    async def subscribe(self, topic_ids, consumer_id="", consumer_group=None):
-        open_stream = ensign_pb2.OpenStream(
-            topics=topic_ids, consumer_id=consumer_id, group=consumer_group
+    async def subscribe(self, topic_ids, client_id="", query="", consumer_group=None):
+        # First message must be a Subscription request with the topic
+        sub = ensign_pb2.Subscription(
+            client_id=client_id,
+            topics=topic_ids,
+            query=query,
+            group=consumer_group,
         )
-        subscription = ensign_pb2.Subscription(open_stream=open_stream)
+        req = ensign_pb2.SubscribeRequest(subscription=sub)
 
         # TODO: This is a bidirectional stream, we should be a good citizen and return
         # acks and nacks to the server.
-        async for event in self.stub.Subscribe(iter([subscription])):
-            yield event
+        ready = False
+        async for rep in self.stub.Subscribe(iter([req])):
+            rep_type = rep.WhichOneof("embed")
+            if not ready and rep_type != "ready":
+                raise EnsignTypeError(
+                    "expected ready response, got {}".format(rep_type)
+                )
+            if rep_type == "ready":
+                ready = True
+            elif rep_type == "event":
+                yield unwrap(rep.event)
+            elif rep_type == "close_stream":
+                break
+            else:
+                raise EnsignTypeError(f"unexpected response type: {rep_type}")
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):

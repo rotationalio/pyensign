@@ -5,10 +5,11 @@ from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
+from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.auth.client import AuthClient
 from pyensign.exceptions import (
     CacheMissError,
-    EnsignResponseType,
+    EnsignTypeError,
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
 )
@@ -76,7 +77,7 @@ class Ensign:
         else:
             self.topics = Cache()
 
-    async def publish(self, topic_name, *events):
+    async def publish(self, topic_name, *events, client_id=""):
         """
         Publish events to an Ensign topic.
 
@@ -87,6 +88,10 @@ class Ensign:
 
         events : iterable of events
             The events to publish.
+
+        client_id : str (optional)
+            The client ID to use for the publisher. If not provided, a new client ID is
+            generated.
         """
 
         if topic_name == "":
@@ -95,33 +100,34 @@ class Ensign:
         if len(events) == 0:
             raise ValueError("no events provided")
 
+        if client_id == "":
+            client_id = str(ULID())
+
         # Ensure the topic ID exists by getting or creating it
-        topic_id = ""
+        topic_id = None
         try:
-            topic_id = await self.topic_id(topic_name)
+            id_str = await self.topic_id(topic_name)
+            topic_id = ULID.from_str(id_str)
         except EnsignTopicNotFoundError:
             topic = await self.create_topic(topic_name)
-            topic_id = str(ULID.from_bytes(topic.id))
+            topic_id = ULID.from_bytes(topic.id)
 
         # TODO: Support user-defined generators
         def next():
             for event in events:
-                yield event.proto(topic_id)
+                yield event.proto()
 
         errors = []
-        async for publication in self.client.publish(next()):
-            rep_type = publication.WhichOneof("embed")
-            if rep_type == "ack":
+        async for rep in self.client.publish(topic_id, next()):
+            if isinstance(rep, ensign_pb2.Ack):
                 continue
-            elif rep_type == "nack":
-                errors.append(publication.nack)
-            elif rep_type == "close_stream":
-                break
+            elif isinstance(rep, ensign_pb2.Nack):
+                errors.append(rep)
             else:
-                raise EnsignResponseType(f"unexpected response type: {rep_type}")
+                raise EnsignTypeError(f"unexpected response type: {type(rep)}")
         return errors
 
-    async def subscribe(self, *topic_ids, consumer_id="", consumer_group=None):
+    async def subscribe(self, *topic_ids, client_id="", query="", consumer_group=None):
         """
         Subscribe to events from the Ensign server.
 
@@ -130,8 +136,12 @@ class Ensign:
         topic_ids : iterable of str
             The topic IDs to subscribe to.
 
-        consumer_id : str (optional)
-            The consumer ID to use for the subscriber.
+        client_id : str (optional)
+            The client ID to use for the subscriber. If not provided, a new client ID
+            is generated.
+
+        query : str (optional)
+            EnSQL query to filter events.
 
         consumer_group : api.v1beta1.groups.ConsumerGroup (optional)
             The consumer group to use for the subscriber.
@@ -145,8 +155,14 @@ class Ensign:
         if len(topic_ids) == 0:
             raise ValueError("no topic IDs provided")
 
+        if client_id == "":
+            client_id = str(ULID())
+
         async for event in self.client.subscribe(
-            topic_ids, consumer_id, consumer_group
+            topic_ids,
+            client_id=client_id,
+            query=query,
+            consumer_group=consumer_group,
         ):
             yield event
 

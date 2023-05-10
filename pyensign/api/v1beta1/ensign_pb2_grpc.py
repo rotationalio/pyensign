@@ -3,7 +3,6 @@
 import grpc
 
 from pyensign.api.v1beta1 import ensign_pb2 as api_dot_v1beta1_dot_ensign__pb2
-from pyensign.api.v1beta1 import event_pb2 as api_dot_v1beta1_dot_event__pb2
 from pyensign.api.v1beta1 import topic_pb2 as api_dot_v1beta1_dot_topic__pb2
 
 
@@ -23,13 +22,13 @@ class EnsignStub(object):
         """
         self.Publish = channel.stream_stream(
             "/ensign.v1beta1.Ensign/Publish",
-            request_serializer=api_dot_v1beta1_dot_event__pb2.Event.SerializeToString,
-            response_deserializer=api_dot_v1beta1_dot_ensign__pb2.Publication.FromString,
+            request_serializer=api_dot_v1beta1_dot_ensign__pb2.PublisherRequest.SerializeToString,
+            response_deserializer=api_dot_v1beta1_dot_ensign__pb2.PublisherReply.FromString,
         )
         self.Subscribe = channel.stream_stream(
             "/ensign.v1beta1.Ensign/Subscribe",
-            request_serializer=api_dot_v1beta1_dot_ensign__pb2.Subscription.SerializeToString,
-            response_deserializer=api_dot_v1beta1_dot_event__pb2.Event.FromString,
+            request_serializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeRequest.SerializeToString,
+            response_deserializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeReply.FromString,
         )
         self.ListTopics = channel.unary_unary(
             "/ensign.v1beta1.Ensign/ListTopics",
@@ -60,6 +59,11 @@ class EnsignStub(object):
             "/ensign.v1beta1.Ensign/TopicExists",
             request_serializer=api_dot_v1beta1_dot_topic__pb2.TopicName.SerializeToString,
             response_deserializer=api_dot_v1beta1_dot_topic__pb2.TopicExistsInfo.FromString,
+        )
+        self.Info = channel.unary_unary(
+            "/ensign.v1beta1.Ensign/Info",
+            request_serializer=api_dot_v1beta1_dot_ensign__pb2.InfoRequest.SerializeToString,
+            response_deserializer=api_dot_v1beta1_dot_ensign__pb2.ProjectInfo.FromString,
         )
         self.Status = channel.unary_unary(
             "/ensign.v1beta1.Ensign/Status",
@@ -137,6 +141,12 @@ class EnsignServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def Info(self, request, context):
+        """Info provides statistics and metrics describing the state of a project"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def Status(self, request, context):
         """Implements a client-side heartbeat that can also be used by monitoring tools."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -148,13 +158,13 @@ def add_EnsignServicer_to_server(servicer, server):
     rpc_method_handlers = {
         "Publish": grpc.stream_stream_rpc_method_handler(
             servicer.Publish,
-            request_deserializer=api_dot_v1beta1_dot_event__pb2.Event.FromString,
-            response_serializer=api_dot_v1beta1_dot_ensign__pb2.Publication.SerializeToString,
+            request_deserializer=api_dot_v1beta1_dot_ensign__pb2.PublisherRequest.FromString,
+            response_serializer=api_dot_v1beta1_dot_ensign__pb2.PublisherReply.SerializeToString,
         ),
         "Subscribe": grpc.stream_stream_rpc_method_handler(
             servicer.Subscribe,
-            request_deserializer=api_dot_v1beta1_dot_ensign__pb2.Subscription.FromString,
-            response_serializer=api_dot_v1beta1_dot_event__pb2.Event.SerializeToString,
+            request_deserializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeRequest.FromString,
+            response_serializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeReply.SerializeToString,
         ),
         "ListTopics": grpc.unary_unary_rpc_method_handler(
             servicer.ListTopics,
@@ -185,6 +195,11 @@ def add_EnsignServicer_to_server(servicer, server):
             servicer.TopicExists,
             request_deserializer=api_dot_v1beta1_dot_topic__pb2.TopicName.FromString,
             response_serializer=api_dot_v1beta1_dot_topic__pb2.TopicExistsInfo.SerializeToString,
+        ),
+        "Info": grpc.unary_unary_rpc_method_handler(
+            servicer.Info,
+            request_deserializer=api_dot_v1beta1_dot_ensign__pb2.InfoRequest.FromString,
+            response_serializer=api_dot_v1beta1_dot_ensign__pb2.ProjectInfo.SerializeToString,
         ),
         "Status": grpc.unary_unary_rpc_method_handler(
             servicer.Status,
@@ -224,8 +239,8 @@ class Ensign(object):
             request_iterator,
             target,
             "/ensign.v1beta1.Ensign/Publish",
-            api_dot_v1beta1_dot_event__pb2.Event.SerializeToString,
-            api_dot_v1beta1_dot_ensign__pb2.Publication.FromString,
+            api_dot_v1beta1_dot_ensign__pb2.PublisherRequest.SerializeToString,
+            api_dot_v1beta1_dot_ensign__pb2.PublisherReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -253,8 +268,8 @@ class Ensign(object):
             request_iterator,
             target,
             "/ensign.v1beta1.Ensign/Subscribe",
-            api_dot_v1beta1_dot_ensign__pb2.Subscription.SerializeToString,
-            api_dot_v1beta1_dot_event__pb2.Event.FromString,
+            api_dot_v1beta1_dot_ensign__pb2.SubscribeRequest.SerializeToString,
+            api_dot_v1beta1_dot_ensign__pb2.SubscribeReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -429,6 +444,35 @@ class Ensign(object):
             "/ensign.v1beta1.Ensign/TopicExists",
             api_dot_v1beta1_dot_topic__pb2.TopicName.SerializeToString,
             api_dot_v1beta1_dot_topic__pb2.TopicExistsInfo.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def Info(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/ensign.v1beta1.Ensign/Info",
+            api_dot_v1beta1_dot_ensign__pb2.InfoRequest.SerializeToString,
+            api_dot_v1beta1_dot_ensign__pb2.ProjectInfo.FromString,
             options,
             channel_credentials,
             insecure,

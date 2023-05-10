@@ -130,3 +130,6 @@ dmypy.json
 
 # OS artifacts
 .DS_Store
+
+# IDEs
+.vscode/

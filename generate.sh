@@ -16,6 +16,7 @@ fi
 
 API=$PROTO_DIR/api/v1beta1
 MIMETYPE=$PROTO_DIR/mimetype/v1beta1
+REGION=$PROTO_DIR/region/v1beta1
 
 # Build the protocol buffers using grpcio-tools
 python3 -m grpc_tools.protoc -I$PROTO_DIR \
@@ -33,9 +34,14 @@ python3 -m grpc_tools.protoc -I$PROTO_DIR \
     --python_out=pyensign \
     $MIMETYPE/mimetype.proto
 
+python3 -m grpc_tools.protoc -I$PROTO_DIR \
+    --python_out=pyensign \
+    $REGION/region.proto
+
 # Fix the imports
 sed -i'.bak' 's/from api.v1beta1/from pyensign.api.v1beta1/g' pyensign/api/v1beta1/*.py
 sed -i'.bak' 's/from api.v1beta1/from pyensign.api.v1beta1/g' pyensign/mimetype/v1beta1/*.py
+sed -i'.bak' 's/from region.v1beta1/from pyensign.region.v1beta1/g' pyensign/api/v1beta1/*.py
 sed -i'.bak' 's/from mimetype.v1beta1/from pyensign.mimetype.v1beta1/g' pyensign/api/v1beta1/*.py
 sed -i'.bak' 's/from mimetype.v1beta1/from pyensign.mimetype.v1beta1/g' pyensign/mimetype/v1beta1/*.py
 rm pyensign/api/v1beta1/*.bak

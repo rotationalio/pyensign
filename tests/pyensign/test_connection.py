@@ -133,13 +133,34 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     """
 
     def Publish(self, request_iterator, context):
-        for request in request_iterator:
-            ack = ensign_pb2.Ack(id=request.id)
-            yield ensign_pb2.Publication(ack=ack)
+        stream_ready = ensign_pb2.StreamReady(
+            client_id="client_id",
+            server_id="server_id",
+            topics={"topic_name": ULID().bytes},
+        )
+        yield ensign_pb2.PublisherReply(ready=stream_ready)
+
+        for _ in request_iterator:
+            ack = ensign_pb2.Ack(id=ULID().bytes)
+            yield ensign_pb2.PublisherReply(ack=ack)
+
+        yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
 
     def Subscribe(self, request_iterator, context):
+        stream_ready = ensign_pb2.StreamReady(
+            client_id="client_id",
+            server_id="server_id",
+            topics={"topic_name": ULID().bytes},
+        )
+        yield ensign_pb2.SubscribeReply(ready=stream_ready)
+
         for _ in request_iterator:
-            yield event_pb2.Event()
+            ew = event_pb2.EventWrapper(
+                event=event_pb2.Event(data=b"data").SerializeToString()
+            )
+            yield ensign_pb2.SubscribeReply(event=ew)
+
+        yield ensign_pb2.SubscribeReply(close_stream=ensign_pb2.CloseStream())
 
     def ListTopics(self, request, context):
         topics = [
@@ -182,11 +203,11 @@ class TestClient:
 
     async def test_publish(self, client):
         events = [
-            event_pb2.Event(id="1"),
-            event_pb2.Event(id="2"),
+            event_pb2.Event(user_defined_id="1"),
+            event_pb2.Event(user_defined_id="2"),
         ]
-        async for rep in client.publish(iter(events)):
-            assert isinstance(rep, ensign_pb2.Publication)
+        async for rep in client.publish(ULID(), iter(events)):
+            assert isinstance(rep, ensign_pb2.Ack)
 
     async def test_subscribe(self, client):
         async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
@@ -194,12 +215,12 @@ class TestClient:
 
     async def test_pub_sub(self, client):
         events = [
-            event_pb2.Event(id="1"),
-            event_pb2.Event(id="2"),
+            event_pb2.Event(user_defined_id="1"),
+            event_pb2.Event(user_defined_id="2"),
         ]
-        async for rep in client.publish(iter(events)):
+        async for rep in client.publish(ULID(), iter(events)):
             await asyncio.sleep(0.01)
-            assert isinstance(rep, ensign_pb2.Publication)
+            assert isinstance(rep, ensign_pb2.Ack)
 
         async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
             await asyncio.sleep(0.01)
