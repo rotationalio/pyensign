@@ -1,11 +1,8 @@
 import time
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from pyensign import mimetypes as mtype
 from pyensign.api.v1beta1 import event_pb2
-from pyensign.mimetype.v1beta1 import mimetype_pb2
-
-mimetypes = mimetype_pb2.DESCRIPTOR.enum_types_by_name["MIME"].values_by_name
-mimetype_names = mimetypes.keys()
 
 
 class Event:
@@ -23,7 +20,7 @@ class Event:
         data : bytes
             The data to use for the event.
         mimetype: str or int
-            The mimetype of the data (e.g. "APPLICATION_JSON").
+            The mimetype of the data (e.g. "application/json").
         id : str (optional)
             A user-defined ID for the event.
         meta: dict (optional)
@@ -33,18 +30,10 @@ class Event:
         if not data:
             raise ValueError("no data provided")
 
-        if not mimetype:
+        if mimetype is None:
             raise ValueError("no mimetype provided")
 
-        # TODO: Support traditionally formatted mimetypes (e.g. application/json)
-        if isinstance(mimetype, str):
-            if mimetype not in mimetypes:
-                raise ValueError(
-                    "invalid mimetype, specify one of: {}".format(mimetype_names)
-                )
-            self.mimetype = mimetypes[mimetype].number
-        else:
-            self.mimetype = mimetype
+        self.mimetype = mtype.parse(mimetype)
 
         # Fields that the user may want to modify after creation.
         self.id = id
