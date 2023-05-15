@@ -268,6 +268,53 @@ class TestEnsign:
         assert exists
 
     @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.info")
+    async def test_info(self, mock_info, ensign):
+        expected = ensign_pb2.ProjectInfo(
+            project_id=str(ULID),
+            topics=3,
+            readonly_topics=1,
+            events=100,
+        )
+        mock_info.return_value = expected
+        actual = await ensign.info()
+        assert actual == expected
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.info")
+    async def test_info_filter(self, mock_info, ensign):
+        expected = ensign_pb2.ProjectInfo(
+            project_id=str(ULID),
+            topics=3,
+            readonly_topics=1,
+            events=100,
+        )
+        mock_info.return_value = expected
+        topic_ids = [str(ULID()), str(ULID())]
+        actual = await ensign.info(topic_ids=topic_ids)
+
+        # Ensure that ID bytes, not ULIDs, are passed to the client
+        id_bytes = [ULID.from_str(id).bytes for id in topic_ids]
+        mock_info.assert_called_once_with(id_bytes)
+        assert actual == expected
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "topic_ids,exception",
+        [
+            ("otters", TypeError),
+            (1234, TypeError),
+            (None, TypeError),
+            (["otters"], ValueError),
+            (["otters", 1234], ValueError),
+            ([str(ULID()), "otters"], ValueError),
+        ],
+    )
+    async def test_info_bad_topics(self, topic_ids, exception, ensign):
+        with pytest.raises(exception):
+            await ensign.info(topic_ids)
+
+    @pytest.mark.asyncio
     @patch("pyensign.connection.Client.topic_exists")
     async def test_topic_exists_no_cache(self, mock_exists, ensign_no_cache):
         mock_exists.return_value = (None, True)

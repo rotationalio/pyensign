@@ -298,6 +298,35 @@ class Ensign:
         _, exists = await self.client.topic_exists(topic_name=name)
         return exists
 
+    async def info(self, topic_ids=[]):
+        """
+        Get aggregated statistics for topics in the project.
+
+        Parameters
+        ----------
+        topic_ids: list of str (optional)
+            If provided, only aggregate info for the specified topic IDs. Otherwise,
+            the info includes all of the topics in the project.
+
+        Returns
+        -------
+        api.v1beta1.ProjectInfo
+            The aggregated statistics for the topics in the project.
+        """
+
+        if not isinstance(topic_ids, list):
+            raise TypeError(f"expected list of topic IDs, got {type(topic_ids)}")
+
+        # Ensure that only topic IDs are provided
+        topics = []
+        for id in topic_ids:
+            try:
+                topics.append(ULID.from_str(id).bytes)
+            except ValueError:
+                raise ValueError(f"not parseable as a topic ID: {id}")
+
+        return await self.client.info(topics)
+
     async def status(self):
         """
         Check the status of the Ensign server.

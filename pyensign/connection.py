@@ -178,6 +178,10 @@ class Client:
         return rep.query, rep.exists
 
     @catch_rpc_error
+    async def info(self, topics=[]):
+        return await self.stub.Info(ensign_pb2.InfoRequest(topics=topics))
+
+    @catch_rpc_error
     async def status(self, attempts=0, last_checked_at=None):
         params = ensign_pb2.HealthCheck(
             attempts=attempts, last_checked_at=last_checked_at
