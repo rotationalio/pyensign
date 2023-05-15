@@ -211,8 +211,8 @@ class TestClient:
 
     async def test_publish(self, client):
         events = [
-            event_pb2.Event(user_defined_id="1"),
-            event_pb2.Event(user_defined_id="2"),
+            event_pb2.Event(),
+            event_pb2.Event(),
         ]
         async for rep in client.publish(ULID(), iter(events)):
             assert isinstance(rep, ensign_pb2.Ack)
@@ -223,8 +223,8 @@ class TestClient:
 
     async def test_pub_sub(self, client):
         events = [
-            event_pb2.Event(user_defined_id="1"),
-            event_pb2.Event(user_defined_id="2"),
+            event_pb2.Event(),
+            event_pb2.Event(),
         ]
         async for rep in client.publish(ULID(), iter(events)):
             await asyncio.sleep(0.01)

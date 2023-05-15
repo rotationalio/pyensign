@@ -160,12 +160,10 @@ class TestEnsign:
     async def test_subscribe(self, mock_subscribe, ensign):
         events = [
             event_pb2.Event(
-                user_defined_id="1",
                 data=b'{"foo": "bar"}',
                 mimetype=MIME.APPLICATION_JSON,
             ),
             event_pb2.Event(
-                user_defined_id="2",
                 data=b'{"bar": "bz"}',
                 mimetype=MIME.APPLICATION_JSON,
             ),

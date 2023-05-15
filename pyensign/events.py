@@ -11,7 +11,7 @@ class Event:
     create and parse events.
     """
 
-    def __init__(self, data=None, mimetype=None, id="", meta={}):
+    def __init__(self, data=None, mimetype=None, meta={}):
         """
         Create a new Event from a mimetype and data.
 
@@ -21,8 +21,6 @@ class Event:
             The data to use for the event.
         mimetype: str or int
             The mimetype of the data (e.g. "application/json").
-        id : str (optional)
-            A user-defined ID for the event.
         meta: dict (optional)
             A set of key-value pairs to associate with the event.
         """
@@ -36,7 +34,6 @@ class Event:
         self.mimetype = mtype.parse(mimetype)
 
         # Fields that the user may want to modify after creation.
-        self.id = id
         self.data = data
         self.meta = meta
         self.type = event_pb2.Type(
@@ -60,7 +57,6 @@ class Event:
 
         # TODO: Should we raise type errors and missing field errors to help the user?
         return event_pb2.Event(
-            user_defined_id=self.id,
             data=self.data,
             metadata=self.meta,
             mimetype=self.mimetype,
