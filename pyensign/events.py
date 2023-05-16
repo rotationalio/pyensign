@@ -11,7 +11,7 @@ class Event:
     create and parse events.
     """
 
-    def __init__(self, data=None, mimetype=None, meta={}):
+    def __init__(self, data=None, mimetype=mtype.ApplicationJSON, meta={}):
         """
         Create a new Event from a mimetype and data.
 
