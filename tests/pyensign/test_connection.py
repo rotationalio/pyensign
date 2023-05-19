@@ -219,7 +219,6 @@ class TestClient:
 
         async def record_acks(ack):
             nonlocal ack_ids
-            print(ack)
             ack_ids.append(ack.id)
 
         await client.publish(topic_id, iter(events), ack_callback=record_acks)

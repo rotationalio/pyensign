@@ -4,6 +4,7 @@ from grpc import aio
 
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
+from pyensign.utils.tasks import WorkerPool
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
 from pyensign.api.v1beta1.event import wrap, unwrap
@@ -69,7 +70,7 @@ class Client:
         self.stub = ensign_pb2_grpc.EnsignStub(self.channel)
         self.publish_streams = {}
         self.subscribe_streams = {}
-        self.tasks = []
+        self.pool = WorkerPool(max_workers=10, max_queue_size=100)
 
     @catch_rpc_error
     async def publish(
@@ -111,10 +112,10 @@ class Client:
                         # TODO: Parse topic map from stream_ready response
                         stream.ready.set()
                     elif rep_type == "ack":
-                        if ack_callback is not None:
+                        if ack_callback:
                             await ack_callback(rep.ack)
                     elif rep_type == "nack":
-                        if nack_callback is not None:
+                        if nack_callback:
                             await nack_callback(rep.nack)
                     elif rep_type == "close_stream":
                         await stream.close()
@@ -123,15 +124,10 @@ class Client:
                         raise EnsignTypeError(f"unexpected response type: {rep_type}")
 
             # Create a concurrent task to handle the stream
-            # TODO: Use a task pool instead of creating a new task for each stream
-            publish_task = asyncio.create_task(publish_stream())
-
-            def done(t):
-                self.publish_streams.pop(topic_hash)
-                self.tasks.remove(t)
-
-            publish_task.add_done_callback(done)
-            self.tasks.append(publish_task)
+            await self.pool.schedule(
+                publish_stream(),
+                done_callback=lambda: self.publish_streams.pop(topic_hash),
+            )
 
         async def queue_events():
             for event in events:
@@ -139,9 +135,7 @@ class Client:
                 await stream.write_request(req)
 
         # Create a concurrent task to queue the events from the user
-        queue_task = asyncio.create_task(queue_events())
-        self.tasks.append(queue_task)
-        queue_task.add_done_callback(lambda t: self.tasks.remove(t))
+        await self.pool.schedule(queue_events())
 
     @catch_rpc_error
     async def subscribe(self, topic_ids, client_id="", query="", consumer_group=None):
@@ -194,14 +188,10 @@ class Client:
                         break
 
             # Create a concurrent task to handle the stream
-            task = asyncio.create_task(subscribe_stream())
-
-            def done(t):
-                self.subscribe_streams.pop(topic_hash)
-                self.tasks.remove(t)
-
-            task.add_done_callback(done)
-            self.tasks.append(task)
+            await self.pool.schedule(
+                subscribe_stream(),
+                done_callback=lambda: self.subscribe_streams.pop(topic_hash),
+            )
 
         # Yield events from the stream
         while True:
@@ -282,16 +272,14 @@ class Client:
         """
         Close the connection to the server and all ongoing streams.
         """
-        await asyncio.gather(*self.tasks)
+        await self.pool.release()
         await self.channel.close()
 
 
 class Stream:
     """
     Stream implements an in-memory bidirectional buffer for non-blocking communication
-    between coroutines. Writing requests and responses to the stream is non-blocking
-    unless the queue is full, and reading requests and responses blocks until a message
-    is available. The stream also has a ready state that can be used to signal when the
+    between coroutines. The stream has a ready state that can be used to signal when the
     stream is ready to receive requests.
     """
 
@@ -301,15 +289,27 @@ class Stream:
         self.ready = asyncio.Event()
 
     async def write_request(self, message):
+        """
+        Write a request to the stream, blocks if the queue is full.
+        """
         await self._request_queue.put(message)
 
     async def read_request(self):
+        """
+        Read a request from the stream, blocks if the queue is empty.
+        """
         return await self._request_queue.get()
 
     async def write_response(self, message):
+        """
+        Write a response to the stream, blocks if the queue is full.
+        """
         await self._response_queue.put(message)
 
     async def read_response(self):
+        """
+        Read a response from the stream, blocks if the queue is empty.
+        """
         return await self._response_queue.get()
 
     async def close(self):
