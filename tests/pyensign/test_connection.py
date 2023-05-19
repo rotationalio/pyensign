@@ -212,8 +212,8 @@ class TestClient:
     async def test_publish(self, client):
         topic_id = ULID()
         events = [
-            event_pb2.Event(user_defined_id="1"),
-            event_pb2.Event(user_defined_id="2"),
+            event_pb2.Event(),
+            event_pb2.Event(),
         ]
         ack_ids = []
 
@@ -226,7 +226,7 @@ class TestClient:
 
         # Should be able to resume publishing to an existing stream.
         more_events = [
-            event_pb2.Event(user_defined_id="3"),
+            event_pb2.Event(),
         ]
         await client.publish(topic_id, iter(more_events), ack_callback=record_acks)
 
@@ -253,9 +253,9 @@ class TestClient:
     async def test_pub_sub(self, client):
         topic_id = ULID()
         events = [
-            event_pb2.Event(user_defined_id="1"),
-            event_pb2.Event(user_defined_id="2"),
-            event_pb2.Event(user_defined_id="3"),
+            event_pb2.Event(),
+            event_pb2.Event(),
+            event_pb2.Event(),
         ]
         ack_ids = []
 

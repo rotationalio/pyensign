@@ -12,7 +12,6 @@ from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
 @pytest.fixture
 def event():
     return event_pb2.Event(
-        user_defined_id="1",
         data=b"some data",
         metadata={"key": "value"},
         mimetype=MIME.APPLICATION_JSON,
@@ -37,9 +36,7 @@ def test_wrap(event):
     assert ew.event == event.SerializeToString()
     assert ew.topic_id == topic_id.bytes
 
-    event = event_pb2.Event(
-        user_defined_id="1",
-    )
+    event = event_pb2.Event()
     ew = wrap(event, topic_id)
 
 

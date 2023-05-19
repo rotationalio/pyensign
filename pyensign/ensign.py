@@ -167,7 +167,7 @@ class Ensign:
             client_id = str(ULID())
 
         async for event in self.client.subscribe(
-            [],
+            topic_ids,
             client_id=client_id,
             query=query,
             consumer_group=consumer_group,

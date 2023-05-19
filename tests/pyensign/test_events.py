@@ -1,7 +1,7 @@
 import pytest
 
 from pyensign.events import Event
-from pyensign.events import mimetypes
+from pyensign import mimetypes as mt
 from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
 from pyensign.api.v1beta1 import event_pb2
 
@@ -14,12 +14,14 @@ class TestEvent:
     @pytest.mark.parametrize(
         "mimetype, expected",
         [
-            (MIME.APPLICATION_JSON, MIME.APPLICATION_JSON),
+            (MIME.APPLICATION_XML, MIME.APPLICATION_XML),
             (MIME.TEXT_PLAIN, MIME.TEXT_PLAIN),
             (MIME.TEXT_HTML, MIME.TEXT_HTML),
-            ("APPLICATION_JSON", MIME.APPLICATION_JSON),
-            ("TEXT_PLAIN", MIME.TEXT_PLAIN),
-            ("TEXT_HTML", MIME.TEXT_HTML),
+            ("application/json", MIME.APPLICATION_JSON),
+            ("text/plain", MIME.TEXT_PLAIN),
+            ("text/html", MIME.TEXT_HTML),
+            (0, MIME.APPLICATION_OCTET_STREAM),
+            (100, MIME.APPLICATION_XML),
         ],
     )
     def test_event(self, mimetype, expected):
@@ -47,7 +49,7 @@ class TestEvent:
         protobuf.
         """
 
-        event = Event(data=b"test", mimetype=MIME.TEXT_PLAIN)
+        event = Event(data=b"test", mimetype=mt.TextPlain)
         proto = event._proto
         assert proto.data == b"test"
         assert proto.mimetype == MIME.TEXT_PLAIN
@@ -73,4 +75,4 @@ class TestEvent:
         """
 
         with pytest.raises(TypeError):
-            Event(data="notbytes", mimetype=MIME.TEXT_PLAIN)
+            Event(data="notbytes", mimetype=mt.TextPlain)
