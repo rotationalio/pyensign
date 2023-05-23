@@ -110,13 +110,12 @@ class TestEnsign:
             Event(b'{"bar": "bz"}', MIME.APPLICATION_JSON),
         ]
 
-        errors = await ensign.publish(name, events)
+        await ensign.publish(name, events)
 
         # Ensure that the publish call was made with the correct topic ID
         args, _ = mock_publish.call_args
         assert isinstance(args[0], ULID)
         assert args[0] == topic_id
-        assert len(errors) == 1
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
@@ -140,13 +139,12 @@ class TestEnsign:
             Event(b'{"foo": "bar"}', MIME.APPLICATION_JSON),
             Event(b'{"bar": "bz"}', MIME.APPLICATION_JSON),
         ]
-        errors = await ensign.publish(name, events)
+        await ensign.publish(name, events)
 
         # Ensure that the publish call was made with the correct topic ID
         args, _ = mock_publish.call_args
         assert isinstance(args[0], ULID)
         assert args[0] == id
-        assert len(errors) == 1
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.status")
@@ -340,16 +338,17 @@ class TestEnsign:
         async def pub():
             # Delay the publisher to prevent deadlock
             await asyncio.sleep(1)
-            return await ensign.publish(topic, event)
+            await ensign.publish(topic, event)
 
         async def sub():
             id = await ensign.topic_id(topic)
             async for event in ensign.subscribe(id):
                 return event
 
-        errors, event = await asyncio.gather(pub(), sub())
-        assert len(errors) == 0
+        _, event = await asyncio.gather(pub(), sub())
         assert event.data == b"message in a bottle"
         assert event.mimetype == MIME.TEXT_PLAIN
         assert event.type.name == "Generic"
-        assert event.type.version == 1
+        assert event.type.major_version == 1
+        assert event.type.minor_version == 0
+        assert event.type.patch_version == 0

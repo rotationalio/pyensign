@@ -77,7 +77,9 @@ class Ensign:
         else:
             self.topics = Cache()
 
-    async def publish(self, topic_name, *events, client_id=""):
+    async def publish(
+        self, topic_name, *events, ack_callback=None, nack_callback=None, client_id=""
+    ):
         """
         Publish events to an Ensign topic.
 
@@ -88,6 +90,14 @@ class Ensign:
 
         events : iterable of events
             The events to publish.
+
+        ack_callback: callable (optional)
+            A callback to be invoked when an ACK message is received from Ensign,
+            indicating that an event was successfully published.
+
+        nack_callback: callable (optional)
+            A callback to be invoked when a NACK message is received from Ensign,
+            indicating that the event could not be published.
 
         client_id : str (optional)
             The client ID to use for the publisher. If not provided, a new client ID is
@@ -117,15 +127,13 @@ class Ensign:
             for event in events:
                 yield event.proto()
 
-        errors = []
-        async for rep in self.client.publish(topic_id, next()):
-            if isinstance(rep, ensign_pb2.Ack):
-                continue
-            elif isinstance(rep, ensign_pb2.Nack):
-                errors.append(rep)
-            else:
-                raise EnsignTypeError(f"unexpected response type: {type(rep)}")
-        return errors
+        await self.client.publish(
+            topic_id,
+            next(),
+            ack_callback=ack_callback,
+            nack_callback=nack_callback,
+            client_id=client_id,
+        )
 
     async def subscribe(self, *topic_ids, client_id="", query="", consumer_group=None):
         """

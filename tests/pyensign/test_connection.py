@@ -1,6 +1,5 @@
 import os
 import pytest
-import asyncio
 from ulid import ULID
 from grpc import RpcError
 from pytest_httpserver import HTTPServer
@@ -41,7 +40,7 @@ def grpc_servicer():
     return MockServicer()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def grpc_create_channel(request, grpc_addr, grpc_server):
     def _create_channel():
         from grpc.experimental import aio
@@ -51,12 +50,12 @@ def grpc_create_channel(request, grpc_addr, grpc_server):
     return _create_channel
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def grpc_channel(grpc_create_channel):
     return grpc_create_channel()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def client(grpc_channel):
     return Client(MockConnection(grpc_channel))
 
@@ -140,13 +139,14 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         )
         yield ensign_pb2.PublisherReply(ready=stream_ready)
 
-        for _ in request_iterator:
+        for _ in range(3):
             ack = ensign_pb2.Ack(id=ULID().bytes)
             yield ensign_pb2.PublisherReply(ack=ack)
 
         yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
 
     def Subscribe(self, request_iterator, context):
+        # TODO: Ensure acks are being sent back to the server
         stream_ready = ensign_pb2.StreamReady(
             client_id="client_id",
             server_id="server_id",
@@ -154,9 +154,9 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         )
         yield ensign_pb2.SubscribeReply(ready=stream_ready)
 
-        for _ in request_iterator:
+        for _ in range(3):
             ew = event_pb2.EventWrapper(
-                event=event_pb2.Event(data=b"data").SerializeToString()
+                id=ULID().bytes, event=event_pb2.Event(data=b"data").SerializeToString()
             )
             yield ensign_pb2.SubscribeReply(event=ew)
 
@@ -210,29 +210,68 @@ class TestClient:
     """
 
     async def test_publish(self, client):
+        topic_id = ULID()
         events = [
             event_pb2.Event(),
             event_pb2.Event(),
         ]
-        async for rep in client.publish(ULID(), iter(events)):
-            assert isinstance(rep, ensign_pb2.Ack)
+        ack_ids = []
+
+        async def record_acks(ack):
+            nonlocal ack_ids
+            ack_ids.append(ack.id)
+
+        await client.publish(topic_id, iter(events), ack_callback=record_acks)
+
+        # Should be able to resume publishing to an existing stream.
+        more_events = [
+            event_pb2.Event(),
+        ]
+        await client.publish(topic_id, iter(more_events), ack_callback=record_acks)
+
+        await client.close()
+        assert len(ack_ids) == len(events) + len(more_events)
 
     async def test_subscribe(self, client):
-        async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
+        topic_ids = [str(ULID()), str(ULID())]
+        events = 0
+        async for rep in client.subscribe(topic_ids):
             assert isinstance(rep, event_pb2.Event)
+            events += 1
+            if events == 2:
+                break
+
+        # Should be able to resume subscribing to an existing stream.
+        async for rep in client.subscribe(topic_ids):
+            assert isinstance(rep, event_pb2.Event)
+            events += 1
+
+        await client.close()
+        assert events == 3
 
     async def test_pub_sub(self, client):
+        topic_id = ULID()
         events = [
             event_pb2.Event(),
             event_pb2.Event(),
+            event_pb2.Event(),
         ]
-        async for rep in client.publish(ULID(), iter(events)):
-            await asyncio.sleep(0.01)
-            assert isinstance(rep, ensign_pb2.Ack)
+        ack_ids = []
 
+        async def record_acks(ack):
+            nonlocal ack_ids
+            ack_ids.append(ack.id)
+
+        await client.publish(topic_id, iter(events), ack_callback=record_acks)
+
+        received = 0
         async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
-            await asyncio.sleep(0.01)
             assert isinstance(rep, event_pb2.Event)
+            received += 1
+
+        await client.close()
+        assert len(ack_ids) == len(events)
+        assert received == len(events)
 
     async def test_list_topics(self, client):
         topics, next_page_token = await client.list_topics()
