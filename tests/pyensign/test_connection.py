@@ -128,25 +128,44 @@ class MockConnection(Connection):
 class MockServicer(ensign_pb2_grpc.EnsignServicer):
     """
     Minimal mock of the Ensign service so we can exercise the client code directly in
-    tests.
+    tests. This service checks that the correct types are being sent by the client. The
+    asserts will manifest as AioRpcErrors in the client but will also be visible in the
+    pytest output.
     """
 
     def Publish(self, request_iterator, context):
+        # First client request should be an open_stream
+        req = next(request_iterator)
+        assert isinstance(req, ensign_pb2.PublisherRequest)
+        assert req.WhichOneof("embed") == "open_stream"
+
+        # Send back stream_ready to progress the client
         stream_ready = ensign_pb2.StreamReady(
             client_id="client_id",
             server_id="server_id",
-            topics={"topic_name": ULID().bytes},
+            topics={"topic_name": ULID().bytes}
         )
         yield ensign_pb2.PublisherReply(ready=stream_ready)
 
         for _ in range(3):
+            # Ensure the client is only sending events
+            req = next(request_iterator)
+            assert isinstance(req, ensign_pb2.PublisherRequest)
+            assert req.WhichOneof("embed") == "event"
+
+            # Send back an ack to the client
             ack = ensign_pb2.Ack(id=ULID().bytes)
             yield ensign_pb2.PublisherReply(ack=ack)
 
         yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
 
     def Subscribe(self, request_iterator, context):
-        # TODO: Ensure acks are being sent back to the server
+        # First client request should be a subscription
+        req = next(request_iterator)
+        assert isinstance(req, ensign_pb2.SubscribeRequest)
+        assert req.WhichOneof("embed") == "subscription"
+
+        # Send back stream_ready to progress the client
         stream_ready = ensign_pb2.StreamReady(
             client_id="client_id",
             server_id="server_id",
@@ -154,11 +173,17 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         )
         yield ensign_pb2.SubscribeReply(ready=stream_ready)
 
-        for _ in range(3):
+        for i in range(3):
+            # Send back an event to the client
             ew = event_pb2.EventWrapper(
-                id=ULID().bytes, event=event_pb2.Event(data=b"data").SerializeToString()
+                id=ULID().bytes, event=event_pb2.Event(data="event {}".format(i).encode()).SerializeToString()
             )
             yield ensign_pb2.SubscribeReply(event=ew)
+
+            # Ensure the client is only sending acks or nacks
+            req = next(request_iterator)
+            assert isinstance(req, ensign_pb2.SubscribeRequest)
+            assert req.WhichOneof("embed") in ("ack", "nack")
 
         yield ensign_pb2.SubscribeReply(close_stream=ensign_pb2.CloseStream())
 

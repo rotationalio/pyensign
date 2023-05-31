@@ -201,11 +201,11 @@ class Client:
             elif isinstance(rep, EnsignError):
                 raise rep
             else:
-                yield unwrap(rep)
-
-                # Ack back to the stream after the event has been processed
+                # Ack back to the stream
                 # TODO: Allow the user to ack or nack the event
-                await stream.write_request(ensign_pb2.Ack(id=rep.id))
+                await stream.write_request(ensign_pb2.SubscribeRequest(ack=ensign_pb2.Ack(id=rep.id)))
+
+                yield unwrap(rep)
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):

@@ -327,7 +327,7 @@ class TestEnsign:
             pytest.skip("Skipping live test")
 
         ensign = Ensign(endpoint=ensignserver, auth_url=authserver)
-        event = Event(b"message in a bottle", "TEXT_PLAIN")
+        event = Event(b"message in a bottle", "text/plain")
         topic = "pyensign-pub-sub"
 
         # Ensure the topic exists
