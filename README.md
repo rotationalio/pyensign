@@ -48,10 +48,12 @@ await client.publish("weather", events)
 
 ### Subscribing
 
-Use `Ensign.subscribe()` to subscribe to one or more topics.
+Use `Ensign.subscribe()` to subscribe to one or more topic IDs. Topic IDs are assigned by Ensign, so a common pattern is to retrieve the IDs first.
 
 ```python
-async for event in client.subscribe("weather", "forecast")
+weather_id = await client.topic_id("weather")
+forecast_id = await client.topic_id("forecast")
+async for event in client.subscribe(weather_id, forecast_id)
     print("Received event: {}".format(event))
 ```
 
@@ -70,7 +72,21 @@ async def subscriber(topic):
         # Do something with the event
 
 def main():
-    asyncio.run(subscribe(topic))
+    asyncio.get_event_loop().run_until_complete(subscribe(topic))
+```
+
+How do you know if an event was actually published? The `publish` coroutine allows callbacks to be specified when the client receives acks and nacks from the server. The first argument in the callback is the `Ack` or `Nack`. An `Ack` contains the timestamp when the event was committed. A `Nack` is returned if the event couldn't be committed and contains the ID of the event along with an error describing what went wrong.
+
+
+```python
+async def handle_ack(self, ack):
+    ts = datetime.fromtimestamp(ack.committed.seconds + ack.committed.nanos / 1e9)
+    print(f"Event committed at {ts}")
+
+async def handle_nack(self, nack):
+    print(f"Could not commit event {nack.id} with error {nack.code}: {nack.error}")
+
+await client.publish("weather", event, ack_callback=handle_ack, nack_callback=handle_nack)
 ```
 
 ## Contributing to PyEnsign
