@@ -5,7 +5,6 @@ from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
-from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.auth.client import AuthClient
 from pyensign.exceptions import (
     CacheMissError,
@@ -205,7 +204,7 @@ class Ensign:
             # TODO: Return more specific errors
             raise EnsignTopicCreateError("topic creation failed")
         return str(ULID(created.id))
-    
+
     async def ensure_topic_exists(self, topic_name):
         """
         Check if a topic exists and create it if it does not. This is a shortcut for
