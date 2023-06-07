@@ -79,7 +79,8 @@ class Ensign:
         self, topic_name, *events, ack_callback=None, nack_callback=None, client_id=""
     ):
         """
-        Publish events to an Ensign topic.
+        Publish events to an Ensign topic. If the topic doesn't exist it will be
+        created.
 
         Parameters
         ----------
