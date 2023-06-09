@@ -77,7 +77,8 @@ class Ensign:
 
     async def publish(self, topic_name, *events, on_ack=None, on_nack=None):
         """
-        Publish events to an Ensign topic.
+        Publish events to an Ensign topic. If the topic doesn't exist it will be
+        created.
 
         Parameters
         ----------
@@ -103,13 +104,7 @@ class Ensign:
             raise ValueError("no events provided")
 
         # Ensure the topic ID exists by getting or creating it
-        topic_id = None
-        try:
-            id_str = await self.topic_id(topic_name)
-            topic_id = ULID.from_str(id_str)
-        except EnsignTopicNotFoundError:
-            topic = await self.create_topic(topic_name)
-            topic_id = ULID.from_bytes(topic.id)
+        topic_id = await self.ensure_topic_exists(topic_name)
 
         # TODO: Support user-defined generators
         async def next():
@@ -117,7 +112,7 @@ class Ensign:
                 yield event.proto()
 
         await self.client.publish(
-            topic_id,
+            ULID().from_str(topic_id),
             next(),
             on_ack=on_ack,
             on_nack=on_nack,
@@ -178,19 +173,41 @@ class Ensign:
 
         Parameters
         ----------
-        topic_name : api.v1beta1.topic_pb2.Topic
-            The name for the new topic, must be unique.
+        topic_name : str
+            The name for the new topic, must be unique to the project.
 
         Returns
         -------
-        api.v1beta1.topic_pb2.Topic
-            The topic that was created.
+        str
+            The ID of the topic that was created.
         """
 
         created = await self.client.create_topic(topic_pb2.Topic(name=topic_name))
         if not created:
+            # TODO: Return more specific errors
             raise EnsignTopicCreateError("topic creation failed")
-        return created
+        return str(ULID(created.id))
+
+    async def ensure_topic_exists(self, topic_name):
+        """
+        Check if a topic exists and create it if it does not. This is a shortcut for
+        topic_exists and create_topic but also returns the topic ID.
+
+        Parameters
+        ----------
+        topic_name : str
+            The name of the topic to check.
+
+        Returns
+        -------
+        str
+            The ID of the topic.
+        """
+
+        if await self.topic_exists(topic_name):
+            return await self.topic_id(topic_name)
+        else:
+            return await self.create_topic(topic_name)
 
     async def retrieve_topic(self, id):
         raise NotImplementedError

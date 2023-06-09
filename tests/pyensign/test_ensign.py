@@ -92,9 +92,10 @@ class TestEnsign:
             Ensign(client_id=client_id, client_secret=client_secret)
 
     @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.topic_exists")
     @patch("pyensign.connection.Client.list_topics")
     @patch("pyensign.connection.Client.publish")
-    async def test_publish_exists(self, mock_publish, mock_list, ensign):
+    async def test_publish_exists(self, mock_publish, mock_list, mock_exists, ensign):
         name = "otters"
         responses = [
             ensign_pb2.Ack(),
@@ -103,6 +104,7 @@ class TestEnsign:
         topic_id = ULID()
         mock_publish.return_value = async_iter(responses)
         mock_list.return_value = ([topic_pb2.Topic(name=name, id=topic_id.bytes)], "")
+        mock_exists.return_value = (None, True)
 
         # Publish two events, one of them errors
         events = [
@@ -118,11 +120,11 @@ class TestEnsign:
         assert args[0] == topic_id
 
     @pytest.mark.asyncio
-    @patch("pyensign.connection.Client.list_topics")
+    @patch("pyensign.connection.Client.topic_exists")
     @patch("pyensign.connection.Client.create_topic")
     @patch("pyensign.connection.Client.publish")
     async def test_publish_not_exists(
-        self, mock_publish, mock_create, mock_list, ensign
+        self, mock_publish, mock_create, mock_exists, ensign
     ):
         name = "otters"
         id = ULID()
@@ -132,7 +134,7 @@ class TestEnsign:
         ]
         mock_publish.return_value = async_iter(pubs)
         mock_create.return_value = topic_pb2.Topic(id=id.bytes, name=name)
-        mock_list.return_value = ([], "")
+        mock_exists.return_value = (None, False)
 
         # Publish two events, one of them errors
         events = [
@@ -188,10 +190,10 @@ class TestEnsign:
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.create_topic")
     async def test_create_topic(self, mock_create, ensign):
-        id = ULID().bytes
-        mock_create.return_value = topic_pb2.Topic(id=id, name="otters")
-        topic = await ensign.create_topic("otters")
-        assert topic.id == id
+        id = ULID()
+        mock_create.return_value = topic_pb2.Topic(id=id.bytes, name="otters")
+        topic_id = await ensign.create_topic("otters")
+        assert topic_id == str(id)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.create_topic")
@@ -199,6 +201,26 @@ class TestEnsign:
         mock_create.return_value = None
         with pytest.raises(EnsignTopicCreateError):
             await ensign.create_topic("otters")
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.topic_exists")
+    @patch("pyensign.connection.Client.list_topics")
+    async def test_ensure_topic_exists(self, mock_list, mock_exists, ensign):
+        id = ULID()
+        mock_exists.return_value = (None, True)
+        mock_list.return_value = ([topic_pb2.Topic(id=id.bytes, name="otters")], "")
+        topic_id = await ensign.ensure_topic_exists("otters")
+        assert topic_id == str(id)
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.topic_exists")
+    @patch("pyensign.connection.Client.create_topic")
+    async def test_ensure_topic_not_exists(self, mock_create, mock_exists, ensign):
+        id = ULID()
+        mock_exists.return_value = (None, False)
+        mock_create.return_value = topic_pb2.Topic(id=id.bytes, name="otters")
+        topic_id = await ensign.ensure_topic_exists("otters")
+        assert topic_id == str(id)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.destroy_topic")
