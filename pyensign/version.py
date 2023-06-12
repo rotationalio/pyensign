@@ -17,7 +17,7 @@ __version_info__ = {
 
 def get_version(short=False):
     """
-    Prints the version.
+    Returns the version string for pyensign.
     """
     assert __version_info__["releaselevel"] in ("alpha", "beta", "final")
     vers = [
@@ -30,3 +30,10 @@ def get_version(short=False):
             "%s%i" % (__version_info__["releaselevel"][0], __version_info__["serial"])
         )
     return "".join(vers)
+
+
+def user_agent():
+    """
+    Returns the user agent string for pyensign.
+    """
+    return "pyensign/" + get_version()
