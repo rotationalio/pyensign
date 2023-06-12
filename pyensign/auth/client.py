@@ -1,7 +1,10 @@
 import grpc
 import time
-import requests
+import json
+from urllib import request
+from urllib.error import HTTPError, URLError
 
+from pyensign.version import user_agent
 from pyensign.exceptions import AuthenticationError
 from pyensign.auth.tokens import expires_at, not_before
 
@@ -103,14 +106,30 @@ class AuthClient(grpc.AuthMetadataPlugin):
         )
 
     def _do(self, url, body):
-        response = requests.post(url, json=body)
-        if response.status_code != 200:
+        """
+        Perform an HTTP request and update the access and refresh tokens based on the
+        response.
+        """
+        data = json.dumps(body).encode("utf-8")
+        req = request.Request(
+            url, data=data, headers={"User-Agent": user_agent()}, method="POST"
+        )
+        try:
+            with request.urlopen(req) as response:
+                rep = json.loads(response.read())
+                if ACCESS_TOKEN not in rep:
+                    raise AuthenticationError("Missing access_token in response")
+                self._access_token = rep[ACCESS_TOKEN]
+                if REFRESH_TOKEN in rep:
+                    self._refresh_token = rep[REFRESH_TOKEN]
+        except HTTPError as e:
             raise AuthenticationError(
-                "Failed to authenticate with API credentials: %s" % response.text
+                "Failed to authenticate with API credentials: {} error returned".format(
+                    e.code
+                )
             )
-        rep = response.json()
-        if ACCESS_TOKEN not in rep:
-            raise AuthenticationError("Missing access_token in response")
-        self._access_token = rep[ACCESS_TOKEN]
-        if REFRESH_TOKEN in rep:
-            self._refresh_token = rep[REFRESH_TOKEN]
+        except URLError as e:
+            code, msg = e.reason
+            raise AuthenticationError(
+                "Failed to connect to authentication server: [{}] {}".format(code, msg)
+            )
