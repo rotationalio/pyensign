@@ -2,6 +2,7 @@ import grpc
 import asyncio
 from datetime import datetime, timedelta
 
+from ulid import ULID
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.exceptions import EnsignTypeError, EnsignTimeoutError, EnsignInitError
 from pyensign.iterator import (
@@ -22,17 +23,20 @@ class StreamHandler:
 
     def __init__(
         self,
-        stub,
+        client,
         queue,
         reconnect_tick=RECONNECT_TICK,
         reconnect_timeout=RECONNECT_TIMEOUT,
     ):
-        self.stub = stub
+        self.client_id = client.client_id
+        self.stub = client.stub
+        self.topic_cache = client.topics
         self.queue = queue
         self.reconnect_tick = reconnect_tick
         self.reconnect_timeout = reconnect_timeout
         self.shutdown = asyncio.Event()
         self._responses = None
+        self._topics = {}
 
     async def connect(self):
         """
@@ -86,6 +90,24 @@ class StreamHandler:
         # Timeout expired, give up
         raise EnsignTimeoutError("timeout expired while trying to reconnect to stream")
 
+    def _parse_topics(self, topic_map):
+        """
+        Parse topics from a topic map, updating the state on the stream and the global
+        topic cache.
+        """
+
+        for name, id_bytes in topic_map.items():
+            try:
+                id = ULID(id_bytes)
+            except ValueError:
+                # Ignore unparseable topic IDs
+                pass
+
+            # Update the topic cache
+            self._topics[name] = id
+            if self.topic_cache:
+                self.topic_cache.add(name, id)
+
     def reset_timeout(self):
         self.timeout = datetime.now() + self.reconnect_timeout
 
@@ -113,22 +135,14 @@ class Publisher(StreamHandler):
 
     def __init__(
         self,
-        stub,
+        client,
         queue,
-        client_id,
         on_ack=None,
         on_nack=None,
-        reconnect_tick=RECONNECT_TICK,
-        reconnect_timeout=RECONNECT_TIMEOUT,
     ):
-        self.stub = stub
-        self.queue = queue
-        self.client_id = client_id
+        super().__init__(client, queue)
         self.on_ack = on_ack
         self.on_nack = on_nack
-        self.reconnect_tick = reconnect_tick
-        self.reconnect_timeout = reconnect_timeout
-        self.shutdown = asyncio.Event()
 
     async def connect(self):
         """
@@ -143,11 +157,13 @@ class Publisher(StreamHandler):
         stream = self.stub.Publish(RequestIterator(self.queue, open_stream))
 
         # First response from the server should be a ready message
-        # TODO: Parse the topic map from the ready message
         rep = await stream.read()
         rep_type = rep.WhichOneof("embed")
         if rep_type != "ready":
             raise EnsignTypeError("expected ready response, got {}".format(rep_type))
+
+        # Save the topics from the ready message
+        self._parse_topics(rep.ready.topics)
 
         # Create the response iterator from the gRPC stream
         self._responses = PublishResponseIterator(
@@ -168,24 +184,17 @@ class Subscriber(StreamHandler):
 
     def __init__(
         self,
-        stub,
+        client,
         queue,
-        client_id,
         topic_ids,
         query="",
         consumer_group=None,
-        reconnect_tick=RECONNECT_TICK,
-        reconnect_timeout=RECONNECT_TIMEOUT,
     ):
-        self.stub = stub
+        super().__init__(client, queue)
         self.queue = queue
-        self.client_id = client_id
         self.topic_ids = topic_ids
         self.query = query
         self.consumer_group = consumer_group
-        self.reconnect_tick = reconnect_tick
-        self.reconnect_timeout = reconnect_timeout
-        self.shutdown = asyncio.Event()
 
     async def connect(self):
         """
@@ -209,6 +218,9 @@ class Subscriber(StreamHandler):
         rep_type = rep.WhichOneof("embed")
         if rep_type != "ready":
             raise EnsignTypeError("expected ready response, got {}".format(rep_type))
+
+        # Save the topics from the ready message
+        self._parse_topics(rep.ready.topics)
 
         # Create the response iterator from the gRPC stream
         self._responses = SubscribeResponseIterator(stream, self.queue)

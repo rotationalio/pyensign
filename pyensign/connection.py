@@ -2,7 +2,7 @@ import grpc
 import asyncio
 from ulid import ULID
 from grpc import aio
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
@@ -63,6 +63,7 @@ class Client:
         self,
         connection,
         client_id="",
+        topic_cache=None,
         reconnect_tick=timedelta(milliseconds=750),
         reconnect_timeout=timedelta(minutes=5),
     ):
@@ -80,6 +81,7 @@ class Client:
         self.publishers = {}
         self.subscribers = {}
         self.pool = WorkerPool(max_workers=10, max_queue_size=100)
+        self.topics = topic_cache
         self.reconnect_tick = reconnect_tick
         self.reconnect_timeout = reconnect_timeout
         self.shutdown = asyncio.Event()
@@ -106,13 +108,10 @@ class Client:
             # Create the publish stream for this topic
             queue = BidiQueue()
             publisher = Publisher(
-                self.stub,
+                self,
                 queue,
-                self.client_id,
                 on_ack=on_ack,
                 on_nack=on_nack,
-                reconnect_tick=self.reconnect_tick,
-                reconnect_timeout=self.reconnect_timeout,
             )
             self.publishers[topic_hash] = publisher
 
@@ -153,9 +152,8 @@ class Client:
             # Create the subscribe stream for these topics
             queue = BidiQueue()
             subscriber = Subscriber(
-                self.stub,
+                self,
                 queue,
-                self.client_id,
                 topic_ids,
                 query=query,
                 consumer_group=consumer_group,

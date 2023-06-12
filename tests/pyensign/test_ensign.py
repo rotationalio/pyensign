@@ -95,29 +95,40 @@ class TestEnsign:
     @patch("pyensign.connection.Client.topic_exists")
     @patch("pyensign.connection.Client.list_topics")
     @patch("pyensign.connection.Client.publish")
-    async def test_publish_exists(self, mock_publish, mock_list, mock_exists, ensign):
-        name = "otters"
+    @pytest.mark.parametrize(
+        "events",
+        [
+            (Event(b'{"foo": "bar"}', "application/json")),
+            ([Event(b'{"foo": "bar"}', "application/json")]),
+            (Event(b'{"foo": "bar"}', "application/json"), Event(b"foo", "text/plain")),
+            ((Event(b'{"foo": "bar"}', "application/json"),)),
+            (*(Event(b'{"foo": "bar"}'), Event(b"foo", "text/plain")),),
+        ],
+    )
+    async def test_publish_exists(
+        self, mock_publish, mock_list, mock_exists, events, ensign
+    ):
         responses = [
             ensign_pb2.Ack(),
             ensign_pb2.Nack(),
         ]
+        name = "otters"
         topic_id = ULID()
         mock_publish.return_value = async_iter(responses)
         mock_list.return_value = ([topic_pb2.Topic(name=name, id=topic_id.bytes)], "")
         mock_exists.return_value = (None, True)
 
-        # Publish two events, one of them errors
-        events = [
-            Event(b'{"foo": "bar"}', MIME.APPLICATION_JSON),
-            Event(b'{"bar": "bz"}', MIME.APPLICATION_JSON),
-        ]
-
+        # Publish the events
         await ensign.publish(name, events)
 
         # Ensure that the publish call was made with the correct topic ID
         args, _ = mock_publish.call_args
         assert isinstance(args[0], ULID)
         assert args[0] == topic_id
+
+        # Ensure that the protobuf events are passed to the publish call
+        async for event in args[1]:
+            assert isinstance(event, event_pb2.Event)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.topic_exists")
@@ -148,6 +159,33 @@ class TestEnsign:
         assert isinstance(args[0], ULID)
         assert args[0] == id
 
+        # Ensure that the protobuf events are passed to the publish call
+        async for event in args[1]:
+            assert isinstance(event, event_pb2.Event)
+
+        # Ensure that the cache is used for subsequent publishes
+        mock_create.return_value = None
+        await ensign.publish(name, events)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "topic, events, exception",
+        [
+            ("", Event(b"foo", "text/plain"), ValueError),
+            (42, Event(b"foo", "text/plain"), TypeError),
+            (None, Event(b"foo", "text/plain"), TypeError),
+            ("otters", [], ValueError),
+        ],
+    )
+    async def test_publish_bad_topic(self, topic, events, exception, ensign):
+        with pytest.raises(exception):
+            await ensign.publish(topic, events)
+
+    @pytest.mark.asyncio
+    async def test_publish_no_events(self, ensign):
+        with pytest.raises(ValueError):
+            await ensign.publish("otters")
+
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.status")
     async def test_status(self, mock_status, ensign):
@@ -156,8 +194,21 @@ class TestEnsign:
         assert status == "status: AVAILABLE\nversion: 1.0.0\nuptime: 10 minutes"
 
     @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.list_topics")
     @patch("pyensign.connection.Client.subscribe")
-    async def test_subscribe(self, mock_subscribe, ensign):
+    @pytest.mark.parametrize(
+        "topics",
+        [
+            ("otters"),
+            (str(ULID())),
+            (["otters"]),
+            (["otters", "lighthouses"]),
+            (("otters", "lighthouses")),
+            (["otters", str(ULID())]),
+            (*("otters", "lighthouses"),),
+        ],
+    )
+    async def test_subscribe(self, mock_subscribe, mock_list, topics, ensign):
         events = [
             event_pb2.Event(
                 data=b'{"foo": "bar"}',
@@ -169,13 +220,51 @@ class TestEnsign:
             ),
         ]
         mock_subscribe.return_value = async_iter(events)
+        mock_list.return_value = (
+            [
+                topic_pb2.Topic(name="otters", id=ULID().bytes),
+                topic_pb2.Topic(name="lighthouses", id=ULID().bytes),
+            ],
+            "",
+        )
         recv = []
-        async for event in ensign.subscribe("otters", "lighthouses"):
+        async for event in ensign.subscribe(topics):
             recv.append(event)
             if len(recv) == 2:
                 break
         assert recv[0].data == events[0].data
         assert recv[1].data == events[1].data
+
+        # Ensure that ULID strings are passed to the subscribe call
+        args, _ = mock_subscribe.call_args
+        for id in args[0]:
+            assert isinstance(ULID.from_str(id), ULID)
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.list_topics")
+    @pytest.mark.parametrize(
+        "topics, exception",
+        [
+            ([], ValueError),
+            (111, TypeError),
+            (("otters", 111), TypeError),
+            ("111", EnsignTopicNotFoundError),
+            ((str(ULID()), "111"), EnsignTopicNotFoundError),
+            (["otters", "111"], EnsignTopicNotFoundError),
+            (["123_invalid_topic"], EnsignTopicNotFoundError),
+        ],
+    )
+    async def test_subscribe_error(self, mock_list, topics, exception, ensign):
+        mock_list.return_value = ([topic_pb2.Topic(name="otters", id=ULID().bytes)], "")
+        with pytest.raises(exception):
+            async for _ in ensign.subscribe(topics):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_subscribe_no_topics(self, ensign):
+        with pytest.raises(ValueError):
+            async for _ in ensign.subscribe():
+                pass
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
