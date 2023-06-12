@@ -75,9 +75,7 @@ class Ensign:
         else:
             self.topics = Cache()
 
-    async def publish(
-        self, topic_name, *events, ack_callback=None, nack_callback=None, client_id=""
-    ):
+    async def publish(self, topic_name, *events, on_ack=None, on_nack=None):
         """
         Publish events to an Ensign topic. If the topic doesn't exist it will be
         created.
@@ -90,17 +88,13 @@ class Ensign:
         events : iterable of events
             The events to publish.
 
-        ack_callback: callable (optional)
-            A callback to be invoked when an ACK message is received from Ensign,
+        on_ack: coroutine (optional)
+            A coroutine to be invoked when an ACK message is received from Ensign,
             indicating that an event was successfully published.
 
-        nack_callback: callable (optional)
-            A callback to be invoked when a NACK message is received from Ensign,
+        on_nack: coroutine (optional)
+            A coroutine to be invoked when a NACK message is received from Ensign,
             indicating that the event could not be published.
-
-        client_id : str (optional)
-            The client ID to use for the publisher. If not provided, a new client ID is
-            generated.
         """
 
         if topic_name == "":
@@ -109,26 +103,22 @@ class Ensign:
         if len(events) == 0:
             raise ValueError("no events provided")
 
-        if client_id == "":
-            client_id = str(ULID())
-
         # Ensure the topic ID exists by getting or creating it
         topic_id = await self.ensure_topic_exists(topic_name)
 
         # TODO: Support user-defined generators
-        def next():
+        async def next():
             for event in events:
                 yield event.proto()
 
         await self.client.publish(
             ULID().from_str(topic_id),
             next(),
-            ack_callback=ack_callback,
-            nack_callback=nack_callback,
-            client_id=client_id,
+            on_ack=on_ack,
+            on_nack=on_nack,
         )
 
-    async def subscribe(self, *topic_ids, client_id="", query="", consumer_group=None):
+    async def subscribe(self, *topic_ids, query="", consumer_group=None):
         """
         Subscribe to events from the Ensign server.
 
@@ -136,10 +126,6 @@ class Ensign:
         ----------
         topic_ids : iterable of str
             The topic IDs to subscribe to.
-
-        client_id : str (optional)
-            The client ID to use for the subscriber. If not provided, a new client ID
-            is generated.
 
         query : str (optional)
             EnSQL query to filter events.
@@ -156,12 +142,8 @@ class Ensign:
         if len(topic_ids) == 0:
             raise ValueError("no topic IDs provided")
 
-        if client_id == "":
-            client_id = str(ULID())
-
         async for event in self.client.subscribe(
             topic_ids,
-            client_id=client_id,
             query=query,
             consumer_group=consumer_group,
         ):

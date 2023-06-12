@@ -165,3 +165,27 @@ class EnsignTopicNotFoundError(EnsignError):
     """
 
     pass
+
+
+class EnsignInitError(EnsignError):
+    """
+    Raised when the Ensign client is not initialized
+    """
+
+    pass
+
+
+class EnsignTimeoutError(EnsignError):
+    """
+    Raised when the Ensign client times out waiting for a response from the server
+    """
+
+    pass
+
+
+class EnsignClientClosingError(EnsignError):
+    """
+    Raised when the Ensign client is closing but a request is made
+    """
+
+    pass

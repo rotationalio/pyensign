@@ -12,9 +12,8 @@ def pytest_addoption(parser):
     )
 
 
-# Make sure that async tests are run in their own event loop
-@pytest.fixture(scope="session")
-def event_loop(request):
+@pytest.fixture()
+def event_loop():
     loop = asyncio.get_event_loop()
     yield loop
     loop.close()
