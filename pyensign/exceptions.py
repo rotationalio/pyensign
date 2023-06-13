@@ -119,6 +119,14 @@ class CacheMissError(PyEnsignError):
     pass
 
 
+class UnknownTopicError(PyEnsignError):
+    """
+    Raised when PyEnsign fails to parse a topic
+    """
+
+    pass
+
+
 class EnsignError(PyEnsignError):
     """
     Raised when PyEnsign receives an error from the Ensign server
