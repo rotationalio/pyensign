@@ -195,6 +195,7 @@ class TestEnsign:
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
+    @patch("pyensign.connection.Client.topic_exists")
     @patch("pyensign.connection.Client.subscribe")
     @pytest.mark.parametrize(
         "topics",
@@ -208,7 +209,9 @@ class TestEnsign:
             (*("otters", "lighthouses"),),
         ],
     )
-    async def test_subscribe(self, mock_subscribe, mock_list, topics, ensign):
+    async def test_subscribe(
+        self, mock_subscribe, mock_exists, mock_list, topics, ensign
+    ):
         events = [
             event_pb2.Event(
                 data=b'{"foo": "bar"}',
@@ -220,6 +223,7 @@ class TestEnsign:
             ),
         ]
         mock_subscribe.return_value = async_iter(events)
+        mock_exists.return_value = (None, True)
         mock_list.return_value = (
             [
                 topic_pb2.Topic(name="otters", id=ULID().bytes),
@@ -242,6 +246,7 @@ class TestEnsign:
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
+    @patch("pyensign.connection.Client.topic_exists")
     @pytest.mark.parametrize(
         "topics, exception",
         [
@@ -254,7 +259,10 @@ class TestEnsign:
             (["123_invalid_topic"], EnsignTopicNotFoundError),
         ],
     )
-    async def test_subscribe_error(self, mock_list, topics, exception, ensign):
+    async def test_subscribe_error(
+        self, mock_exists, mock_list, topics, exception, ensign
+    ):
+        mock_exists.return_value = (None, False)
         mock_list.return_value = ([topic_pb2.Topic(name="otters", id=ULID().bytes)], "")
         with pytest.raises(exception):
             async for _ in ensign.subscribe(topics):
@@ -441,10 +449,6 @@ class TestEnsign:
         event = Event(b"message in a bottle", "text/plain")
         topic = "pyensign-pub-sub"
 
-        # Ensure the topic exists
-        if not await ensign.topic_exists(topic):
-            await ensign.create_topic(topic)
-
         # Run publish and subscribe as coroutines
         async def pub():
             # Delay the publisher to prevent deadlock
@@ -452,8 +456,7 @@ class TestEnsign:
             await ensign.publish(topic, event)
 
         async def sub():
-            id = await ensign.topic_id(topic)
-            async for event in ensign.subscribe(id):
+            async for event in ensign.subscribe(topic):
                 return event
 
         _, event = await asyncio.gather(pub(), sub())

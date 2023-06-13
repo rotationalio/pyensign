@@ -153,7 +153,7 @@ class Ensign:
             If no topics are provided.
 
         EnsignTopicNotFoundError
-            If a topic name is provided that does not exist.
+            If a topic is provided that does not exist.
 
         Yields
         ------
@@ -170,24 +170,16 @@ class Ensign:
         if len(topics) == 0:
             raise ValueError("no topics provided")
 
-        # Ensure all topics are strings
+        # Parse topic names into ID strings
+        topic_ids = []
         for topic in topics:
             if not isinstance(topic, str):
                 raise TypeError(
                     "expected type 'str' for topic, got {}".format(type(topic))
                 )
 
-        # Parse topic names into ID strings
-        topic_ids = []
-        for topic in topics:
-            # First try to parse as a ULID
-            try:
-                id = ULID().from_str(topic)
-            except ValueError:
-                # Otherwise try to parse as a topic name
-                id = await self.topic_id(topic)
-
-            topic_ids.append(str(id))
+            # Get the ID of the topic
+            topic_ids.append(await self._parse_topic(topic))
 
         async for event in self.client.subscribe(
             topic_ids,
@@ -394,3 +386,22 @@ class Ensign:
 
         status, version, uptime, _, _ = await self.client.status()
         return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
+
+    async def _parse_topic(self, topic):
+        """
+        Parse a topic into an ID string. If a topic name is provided and it's unknown,
+        then the topic ID will be requested from Ensign.
+        """
+
+        # Try to parse the topic as a ULID
+        try:
+            id = ULID.from_str(topic)
+        except ValueError:
+            # Assume that this is a topic name
+            return await self.topic_id(topic)
+
+        # Check that the topic ID exists
+        if not await self.client.topic_exists(topic_id=str(id)):
+            raise EnsignTopicNotFoundError(f"topic not found by ID: {id}")
+
+        return str(id)
