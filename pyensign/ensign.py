@@ -8,6 +8,7 @@ from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
 from pyensign.exceptions import (
     CacheMissError,
+    UnknownTopicError,
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
 )
@@ -68,22 +69,24 @@ class Ensign:
         creds = {"client_id": client_id, "client_secret": client_secret}
         auth = AuthClient(auth_url, creds)
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
-        self.client = Client(connection)
 
         if disable_topic_cache:
             self.topics = None
         else:
             self.topics = Cache()
 
-    async def publish(self, topic_name, *events, on_ack=None, on_nack=None):
+        self.client = Client(connection, topic_cache=self.topics)
+
+    async def publish(
+        self, topic, *events, on_ack=None, on_nack=None, ensure_exists=False
+    ):
         """
-        Publish events to an Ensign topic. If the topic doesn't exist it will be
-        created.
+        Publish events to an Ensign topic.
 
         Parameters
         ----------
-        topic_name : str
-            The name of the topic to publish events to.
+        topic: str
+            The name or ID of the topic to publish events to.
 
         events : iterable of events
             The events to publish.
@@ -95,16 +98,45 @@ class Ensign:
         on_nack: coroutine (optional)
             A coroutine to be invoked when a NACK message is received from Ensign,
             indicating that the event could not be published.
+
+        ensure_exists: bool (optional)
+            Create the topic if it does not exist. With this option, a topic name must
+            be provided, not an ID.
+
+        Raises
+        ------
+        ValueError
+            If a topic or no events are provided.
+
+        TypeError
+            If the topic is not a string.
+
+        UnknownTopicError
+            If the topic does not exist and ensure_exists is False.
         """
 
-        if topic_name == "":
-            raise ValueError("topic_name is required")
+        if topic == "":
+            raise ValueError("topic is required")
+
+        if not isinstance(topic, str):
+            raise TypeError(
+                "expected type 'str' for topic, got '{}'".format(type(topic).__name__)
+            )
+
+        # Handle a list of events provided as a single argument
+        if len(events) == 1 and (
+            isinstance(events[0], list) or isinstance(events[0], tuple)
+        ):
+            events = events[0]
 
         if len(events) == 0:
             raise ValueError("no events provided")
 
-        # Ensure the topic ID exists by getting or creating it
-        topic_id = await self.ensure_topic_exists(topic_name)
+        # Resolve the topic ID from the name or ID string
+        if ensure_exists:
+            id = ULID.from_str(await self.ensure_topic_exists(topic))
+        else:
+            id = self._resolve_topic(topic)
 
         # TODO: Support user-defined generators
         async def next():
@@ -112,20 +144,20 @@ class Ensign:
                 yield event.proto()
 
         await self.client.publish(
-            ULID().from_str(topic_id),
+            id,
             next(),
             on_ack=on_ack,
             on_nack=on_nack,
         )
 
-    async def subscribe(self, *topic_ids, query="", consumer_group=None):
+    async def subscribe(self, *topics, query="", consumer_group=None):
         """
         Subscribe to events from the Ensign server.
 
         Parameters
         ----------
-        topic_ids : iterable of str
-            The topic IDs to subscribe to.
+        topics : iterable of str
+            The topic names or IDs to subscribe to.
 
         query : str (optional)
             EnSQL query to filter events.
@@ -133,14 +165,39 @@ class Ensign:
         consumer_group : api.v1beta1.groups.ConsumerGroup (optional)
             The consumer group to use for the subscriber.
 
+        Raises
+        ------
+        ValueError
+            If no topics are provided.
+
+        EnsignTopicNotFoundError
+            If a topic is provided that does not exist.
+
         Yields
         ------
         api.v1beta1.event_pb2.Event
             The events received from the Ensign server.
         """
 
-        if len(topic_ids) == 0:
-            raise ValueError("no topic IDs provided")
+        # Handle a list of topics passed as a single argument
+        if len(topics) == 1 and (
+            isinstance(topics[0], list) or isinstance(topics[0], tuple)
+        ):
+            topics = topics[0]
+
+        if len(topics) == 0:
+            raise ValueError("no topics provided")
+
+        # Parse topic names into ID strings
+        topic_ids = []
+        for topic in topics:
+            if not isinstance(topic, str):
+                raise TypeError(
+                    "expected type 'str' for topic, got {}".format(type(topic))
+                )
+
+            # Get the ID of the topic
+            topic_ids.append(str(self._resolve_topic(topic)))
 
         async for event in self.client.subscribe(
             topic_ids,
@@ -186,7 +243,10 @@ class Ensign:
         if not created:
             # TODO: Return more specific errors
             raise EnsignTopicCreateError("topic creation failed")
-        return str(ULID(created.id))
+        id = ULID(created.id)
+        if self.topics:
+            self.topics.add(created.name, id)
+        return str(id)
 
     async def ensure_topic_exists(self, topic_name):
         """
@@ -261,7 +321,7 @@ class Ensign:
         # Attempt to get the topic ID from the cache
         if self.topics is not None:
             try:
-                return self.topics.get(name)
+                return str(self.topics.get(name))
             except CacheMissError:
                 pass
 
@@ -274,10 +334,10 @@ class Ensign:
             page, token = await self.client.list_topics(next_page_token=token)
             for topic in page:
                 if topic.name == name:
-                    id = str(ULID(topic.id))
+                    id = ULID(topic.id)
                     if self.topics is not None:
                         self.topics.add(name, id)
-                    return id
+                    return str(id)
         raise EnsignTopicNotFoundError(f"topic not found by name: {name}")
 
     async def topic_exists(self, name):
@@ -344,3 +404,25 @@ class Ensign:
 
         status, version, uptime, _, _ = await self.client.status()
         return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
+
+    def _resolve_topic(self, topic):
+        """
+        Resolve a topic string into a ULID by looking it up in the cache, otherwise
+        assume it's a topic ID and try to parse it.
+        """
+
+        # Attempt to retrieve the topic ID from the cache
+        if self.topics is not None:
+            try:
+                return self.topics.get(topic)
+            except CacheMissError:
+                pass
+
+        # Otherwise attempt to parse as a ULID
+        try:
+            return ULID.from_str(topic)
+        except ValueError:
+            # TODO: Might need to return the name of the project here
+            raise UnknownTopicError(
+                f"unknown topic '{topic}', please provide the name or ID of a topic in your project"
+            )

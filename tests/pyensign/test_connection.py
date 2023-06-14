@@ -6,6 +6,7 @@ from grpc import RpcError
 from pytest_httpserver import HTTPServer
 
 from pyensign.connection import Client
+from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.connection import Connection
@@ -58,7 +59,7 @@ def grpc_channel(grpc_create_channel):
 
 @pytest.fixture()
 def client(grpc_channel):
-    return Client(MockConnection(grpc_channel))
+    return Client(MockConnection(grpc_channel), topic_cache=Cache())
 
 
 @pytest.fixture
@@ -269,6 +270,10 @@ class TestClient:
         await client.close()
         assert len(ack_ids) == len(events) + len(more_events)
 
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get("topic_name")
+        assert isinstance(id, ULID)
+
     async def test_publish_reconnect(self, client):
         topic_id = ULID()
         ack_ids = []
@@ -295,6 +300,10 @@ class TestClient:
         await client.close()
         assert len(ack_ids) % 3 == 0
 
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get("topic_name")
+        assert isinstance(id, ULID)
+
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
         events = 0
@@ -312,6 +321,10 @@ class TestClient:
         await client.close()
         assert events == 3
 
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get("topic_name")
+        assert isinstance(id, ULID)
+
     async def test_subscribe_reconnect(self, client):
         topic_ids = [str(ULID()), str(ULID())]
         events = 0
@@ -325,6 +338,10 @@ class TestClient:
         # events per connection.
         await client.close()
         assert events % 3 == 0
+
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get("topic_name")
+        assert isinstance(id, ULID)
 
     async def test_pub_sub(self, client):
         topic_id = ULID()
