@@ -95,12 +95,14 @@ class Ensign:
         on_ack: coroutine (optional)
             A coroutine to be invoked when an ACK message is received from Ensign,
             indicating that an event was successfully published. The first argument of
-            the coroutine is the event.Event object that was committed.
+            the coroutine is an Ack object with a `committed` timestamp that indicates
+            when the event was committed.
 
         on_nack: coroutine (optional)
             A coroutine to be invoked when a NACK message is received from Ensign,
             indicating that the event could not be published. The first argument of the
-            coroutine is the event.Event object that was not committed.
+            coroutine is a Nack object with a `code` field that indicates the reason
+            why the event was not published.
 
         ensure_exists: bool (optional)
             Create the topic if it does not exist. With this option, a topic name must
