@@ -5,6 +5,7 @@ from ulid import ULID
 from grpc import RpcError
 from pytest_httpserver import HTTPServer
 
+from pyensign.events import Event
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
@@ -156,7 +157,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
             assert req.WhichOneof("embed") == "event"
 
             # Send back an ack to the client
-            ack = ensign_pb2.Ack(id=ULID().bytes)
+            ack = ensign_pb2.Ack(id=req.event.local_id)
             yield ensign_pb2.PublisherReply(ack=ack)
 
         yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
@@ -242,8 +243,8 @@ class TestClient:
     async def test_publish(self, client):
         topic_id = ULID()
         events = [
-            event_pb2.Event(),
-            event_pb2.Event(),
+            Event(data=b"event 1", mimetype="text/plain"),
+            Event(data=b"event 2", mimetype="text/plain"),
         ]
         ack_ids = []
         published = asyncio.Event()
@@ -262,13 +263,17 @@ class TestClient:
 
         # Should be able to resume publishing to an existing stream.
         more_events = [
-            event_pb2.Event(),
+            Event(data=b"event 3", mimetype="text/plain"),
         ]
         await client.publish(topic_id, source_events(more_events), on_ack=record_acks)
         await published.wait()
 
         await client.close()
         assert len(ack_ids) == len(events) + len(more_events)
+        for event in events:
+            assert event.acked()
+        for event in more_events:
+            assert event.acked()
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get("topic_name")
@@ -282,7 +287,7 @@ class TestClient:
         async def source_events():
             while True:
                 await asyncio.sleep(0.1)
-                yield event_pb2.Event()
+                yield Event(data=b"event", mimetype="text/plain")
 
         # Record acks, only close the stream after two successful connections.
         async def record_acks(ack):
@@ -306,20 +311,24 @@ class TestClient:
 
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
-        events = 0
-        async for rep in client.subscribe(topic_ids):
-            assert isinstance(rep, event_pb2.Event)
-            events += 1
-            if events == 2:
-                break
+        event_ids = []
+        acked = asyncio.Event()
 
-        # Should be able to resume subscribing to an existing stream.
-        async for rep in client.subscribe(topic_ids):
-            assert isinstance(rep, event_pb2.Event)
-            events += 1
+        async def ack_event(event):
+            nonlocal event_ids
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) >= 2:
+                acked.set()
 
+        # Subscribe using an event callback.
+        await client.subscribe(topic_ids, ack_event)
+
+        # Wait for the callback to ack all the events.
+        await acked.wait()
         await client.close()
-        assert events == 3
+        assert len(event_ids) == 2
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get("topic_name")
@@ -327,17 +336,24 @@ class TestClient:
 
     async def test_subscribe_reconnect(self, client):
         topic_ids = [str(ULID()), str(ULID())]
-        events = 0
-        async for rep in client.subscribe(topic_ids):
-            assert isinstance(rep, event_pb2.Event)
-            events += 1
-            if events >= 6:
-                break
+        event_ids = []
+        acked = asyncio.Event()
+
+        async def ack_event(event):
+            nonlocal event_ids
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) >= 6:
+                acked.set()
+
+        # Subscribe using an event callback.
+        await client.subscribe(topic_ids, ack_event)
 
         # The client should have reconnected at least once and the mock server sends 3
         # events per connection.
         await client.close()
-        assert events % 3 == 0
+        assert len(event_ids) % 3 == 0
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get("topic_name")
@@ -346,11 +362,13 @@ class TestClient:
     async def test_pub_sub(self, client):
         topic_id = ULID()
         events = [
-            event_pb2.Event(),
-            event_pb2.Event(),
-            event_pb2.Event(),
+            Event(data=b"event 1", mimetype="text/plain"),
+            Event(data=b"event 2", mimetype="text/plain"),
+            Event(data=b"event 3", mimetype="text/plain"),
         ]
         ack_ids = []
+        event_ids = []
+        acked = asyncio.Event()
 
         async def record_acks(ack):
             nonlocal ack_ids
@@ -362,14 +380,23 @@ class TestClient:
 
         await client.publish(topic_id, source_events(), on_ack=record_acks)
 
-        received = 0
-        async for rep in client.subscribe(topic_ids=iter(["expresso", "arabica"])):
-            assert isinstance(rep, event_pb2.Event)
-            received += 1
+        async def ack_event(event):
+            nonlocal event_ids
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) >= 3:
+                acked.set()
 
+        await client.subscribe(iter(["expresso", "arabica"]), ack_event)
+
+        # Wait for the callback to ack all the events.
+        await acked.wait()
         await client.close()
         assert len(ack_ids) == len(events)
-        assert received == len(events)
+        assert len(event_ids) == len(events)
+        for event in events:
+            assert event.acked()
 
     async def test_list_topics(self, client):
         topics, next_page_token = await client.list_topics()

@@ -127,6 +127,22 @@ class UnknownTopicError(PyEnsignError):
     pass
 
 
+class AckError(PyEnsignError):
+    """
+    Raised when PyEnsign could not ack an event
+    """
+
+    pass
+
+
+class NackError(PyEnsignError):
+    """
+    Raised when PyEnsign could not nack an event
+    """
+
+    pass
+
+
 class EnsignError(PyEnsignError):
     """
     Raised when PyEnsign receives an error from the Ensign server

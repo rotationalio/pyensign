@@ -59,8 +59,9 @@ class PublishResponseIterator(ResponseIterator):
     gRPC publish stream and executes user-defined callbacks for acks and nacks.
     """
 
-    def __init__(self, stream, on_ack=None, on_nack=None):
+    def __init__(self, stream, pending, on_ack=None, on_nack=None):
         self.stream = stream
+        self.pending = pending
         self.on_ack = on_ack
         self.on_nack = on_nack
 
@@ -72,11 +73,17 @@ class PublishResponseIterator(ResponseIterator):
             # Handle messages from the server
             rep_type = rep.WhichOneof("embed")
             if rep_type == "ack":
-                if self.on_ack:
-                    await self.on_ack(rep.ack)
+                event = self.pending.pop(rep.ack.id, None)
+                if event:
+                    event.mark_acked(rep.ack)
+                    if self.on_ack:
+                        await self.on_ack(rep.ack)
             elif rep_type == "nack":
-                if self.on_nack:
-                    await self.on_nack(rep.nack)
+                event = self.pending.pop(rep.nack.id, None)
+                if event:
+                    event.mark_nacked(rep.nack)
+                    if self.on_nack:
+                        await self.on_nack(rep.nack)
             elif rep_type == "close_stream":
                 break
             else:
