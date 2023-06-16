@@ -79,7 +79,7 @@ class TestEnsign:
 
     def test_creds_json(self):
         """
-        Test on reading Json file for credentials.
+        Test on reading JSON file for credentials.
         """
         # set the path for json file
         cred_path = "/pyensign/tests/fixtures/cred.json"

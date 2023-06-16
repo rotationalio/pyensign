@@ -48,20 +48,33 @@ class Ensign:
         disable_topic_cache: bool (optional)
             Set to True to disable topic ID caching.
         """
-        # check if the path exist and run code
+
+        """
+        Read the credentials from JSON  with provide path
+
+        Handle Exceptions:
+        --------------------------
+
+        FileNotFoundError  : File is not found
+        UnicodeDecodeError : Error in decoding the file
+        JSONDecodeError    : JSON format is invalid
+        IOError            : IO error while reading the file
+
+        """
+
         if cred_path:
             try:
                 with open(cred_path, "r") as file:
-                    data = json.load(file)  # Process the loaded JSON data here
+                    data = json.load(file)
                     client_id = data["ClientID"]
                     client_secret = data["ClientSecret"]
-            except FileNotFoundError as e:  # If the file is not found
+            except FileNotFoundError as e:
                 raise ValueError("File does not exist", str(e))
             except UnicodeDecodeError as e:
                 raise ValueError("Error in decoding the file", str(e))
-            except json.JSONDecodeError as e:  # If the JSON format is invalid
+            except json.JSONDecodeError as e:
                 raise json.JSONDecodeError("JSON format is invalid", str(e))
-            except IOError as e:  # If there is an IO error while reading the file
+            except IOError as e:
                 raise IOError("IO error while reading the file:", str(e))
 
         if not client_id or client_id == "":
