@@ -48,23 +48,27 @@ class Ensign:
         disable_topic_cache: bool (optional)
             Set to True to disable topic ID caching.
         """
-
-        try:
-            with open(cred_path, "r") as file:
-                data = json.load(file)  # Process the loaded JSON data here
-                client_id = data["ClientID"]
-                client_secret = data["ClientSecret"]
-        except FileNotFoundError:  # If the file is not found,
-            print("File not found. Please check ")
-        except json.JSONDecodeError as e:  # If the JSON format is invalid
-            print("Invalid JSON format:", str(e))
-        except IOError as e:  # If there is an IO error while reading the file
-            print("IO error:", str(e))
+        # check if the path exist and run code
+        if cred_path:
+            try:
+                with open(cred_path, "r") as file:
+                    data = json.load(file)  # Process the loaded JSON data here
+                    client_id = data["ClientID"]
+                    client_secret = data["ClientSecret"]
+            except FileNotFoundError as e:  # If the file is not found
+                raise ValueError("File does not exist", str(e))
+            except UnicodeDecodeError as e:
+                raise ValueError("Error in decoding the file", str(e))
+            except json.JSONDecodeError as e:  # If the JSON format is invalid
+                raise json.JSONDecodeError("JSON format is invalid", str(e))
+            except IOError as e:  # If there is an IO error while reading the file
+                raise IOError("IO error while reading the file:", str(e))
 
         if not client_id or client_id == "":
             client_id = os.environ.get("ENSIGN_CLIENT_ID")
         if not client_secret or client_secret == "":
             client_secret = os.environ.get("ENSIGN_CLIENT_SECRET")
+
         if client_id is None:
             raise ValueError(
                 "client_id is required but not provided or set in the ENSIGN_CLIENT_ID environment variable"
