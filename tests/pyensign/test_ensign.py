@@ -82,18 +82,15 @@ class TestEnsign:
         Test on reading JSON file for credentials.
         """
         # set the path for json file
-        cred_path = "/rotationalio/pyensign/tests/fixtures/cred.json"
+        cred_path = "tests/fixtures/cred.json"
         Ensign(cred_path=cred_path)
 
     @pytest.mark.parametrize(
         "cred_path, exception",
         [
-            ("/rotationalio/pyensign/tests/fixtures/cred_missing.json", ValueError),
-            (
-                "/rotationalio/pyensign/tests/fixtures/pyensign/tests/fixtures/cred.txt",
-                ValueError,
-            ),
-            ("/rotationalio/pyensign/tests/fixtures/cred_no_file.json", ValueError),
+            ("tests/fixtures/cred_missing.json", ValueError),
+            ("tests/fixtures/cred.txt", ValueError),
+            ("tests/fixtures/cred_no_file.json", ValueError),
         ],
     )
     def test_bad_creds(self, cred_path, exception):
