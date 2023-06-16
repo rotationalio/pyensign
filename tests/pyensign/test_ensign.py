@@ -88,9 +88,9 @@ class TestEnsign:
     @pytest.mark.parametrize(
         "cred_path, exception",
         [
-            ("tests/fixtures/cred_missing.json", ValueError),
-            ("tests/fixtures/cred.txt", ValueError),
-            ("tests/fixtures/cred_no_file.json", ValueError),
+            ("/tests/fixtures/cred_missing.json", ValueError),
+            ("/tests/fixtures/cred.txt", ValueError),
+            ("/tests/fixtures/cred_no_file.json", ValueError),
         ],
     )
     def test_bad_creds(self, cred_path, exception):
