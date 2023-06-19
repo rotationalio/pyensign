@@ -3,8 +3,16 @@ import asyncio
 from datetime import datetime, timedelta
 
 from ulid import ULID
+from pyensign.events import from_proto
 from pyensign.api.v1beta1 import ensign_pb2
-from pyensign.exceptions import EnsignTypeError, EnsignTimeoutError, EnsignInitError
+from pyensign.utils.queue import BidiQueue
+from pyensign.api.v1beta1.event import wrap, unwrap
+from pyensign.exceptions import (
+    EnsignError,
+    EnsignTypeError,
+    EnsignTimeoutError,
+    EnsignInitError,
+)
 from pyensign.iterator import (
     RequestIterator,
     PublishResponseIterator,
@@ -136,13 +144,15 @@ class Publisher(StreamHandler):
     def __init__(
         self,
         client,
-        queue,
+        topic_id,
         on_ack=None,
         on_nack=None,
     ):
-        super().__init__(client, queue)
+        super().__init__(client, BidiQueue())
+        self.topic_id = topic_id
         self.on_ack = on_ack
         self.on_nack = on_nack
+        self.pending = {}
 
     async def connect(self):
         """
@@ -167,8 +177,28 @@ class Publisher(StreamHandler):
 
         # Create the response iterator from the gRPC stream
         self._responses = PublishResponseIterator(
-            stream, on_ack=self.on_ack, on_nack=self.on_nack
+            stream, self.pending, on_ack=self.on_ack, on_nack=self.on_nack
         )
+
+    async def queue_events(self, events):
+        """
+        Queue events to be published on the stream.
+        """
+
+        async for event in events:
+            # If we're shutting down, stop queueing events
+            if self.shutdown.is_set():
+                break
+
+            # Queue the event
+            wrapper = wrap(event.proto(), self.topic_id)
+            req = ensign_pb2.PublisherRequest(event=wrapper)
+            await self.queue.write_request(req)
+            event.mark_published()
+
+            # Save the event for ack/nack handling
+            # TODO: How do we handle events that are never acked/nacked?
+            self.pending[wrapper.local_id] = event
 
 
 class Subscriber(StreamHandler):
@@ -185,13 +215,13 @@ class Subscriber(StreamHandler):
     def __init__(
         self,
         client,
-        queue,
         topic_ids,
+        on_event,
         query="",
         consumer_group=None,
     ):
-        super().__init__(client, queue)
-        self.queue = queue
+        super().__init__(client, BidiQueue())
+        self.on_event = on_event
         self.topic_ids = topic_ids
         self.query = query
         self.consumer_group = consumer_group
@@ -224,3 +254,20 @@ class Subscriber(StreamHandler):
 
         # Create the response iterator from the gRPC stream
         self._responses = SubscribeResponseIterator(stream, self.queue)
+
+    async def consume(self):
+        """
+        Consume the events from the stream and execute user-defined callbacks.
+        """
+
+        while True:
+            rep = await self.queue.read_response()
+            if rep is None:
+                break
+            elif isinstance(rep, EnsignError):
+                raise rep
+            else:
+                # Convert the event into the user facing type
+                event = from_proto(unwrap(rep))
+                event.mark_subscribed(rep.id, self.queue)
+                await self.on_event(event)

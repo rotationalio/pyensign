@@ -8,7 +8,6 @@ from asyncmock import patch
 from pyensign.ensign import Ensign
 from pyensign.events import Event
 from pyensign.api.v1beta1 import ensign_pb2
-from pyensign.api.v1beta1 import event_pb2
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.exceptions import (
     EnsignTopicCreateError,
@@ -108,14 +107,9 @@ class TestEnsign:
         ],
     )
     async def test_publish_name(self, mock_publish, events, ensign):
-        responses = [
-            ensign_pb2.Ack(),
-            ensign_pb2.Nack(),
-        ]
         name = "otters"
         topic_id = ULID()
         ensign.topics.add(name, topic_id)
-        mock_publish.return_value = async_iter(responses)
 
         # Publish the events
         await ensign.publish(name, events)
@@ -127,7 +121,7 @@ class TestEnsign:
 
         # Ensure that the protobuf events are passed to the publish call
         async for event in args[1]:
-            assert isinstance(event, event_pb2.Event)
+            assert isinstance(event, Event)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.publish")
@@ -136,12 +130,7 @@ class TestEnsign:
             Event(b'{"foo": "bar"}', "application/json"),
             Event(b"foo", "text/plain"),
         ]
-        responses = [
-            ensign_pb2.Ack(),
-            ensign_pb2.Nack(),
-        ]
         id = ULID()
-        mock_publish.return_value = async_iter(responses)
 
         # Publish the events
         await ensign.publish(str(id), events)
@@ -153,7 +142,7 @@ class TestEnsign:
 
         # Ensure that the protobuf events are passed to the publish call
         async for event in args[1]:
-            assert isinstance(event, event_pb2.Event)
+            assert isinstance(event, Event)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.topic_exists")
@@ -162,13 +151,8 @@ class TestEnsign:
     async def test_publish_ensure(self, mock_publish, mock_create, mock_exists, ensign):
         name = "otters"
         id = ULID()
-        pubs = [
-            ensign_pb2.Ack(),
-            ensign_pb2.Nack(),
-        ]
 
         # Test the case where the topic has to be created
-        mock_publish.return_value = async_iter(pubs)
         mock_create.return_value = topic_pb2.Topic(id=id.bytes, name=name)
         mock_exists.return_value = (None, False)
 
@@ -186,7 +170,7 @@ class TestEnsign:
 
         # Ensure that the protobuf events are passed to the publish call
         async for event in args[1]:
-            assert isinstance(event, event_pb2.Event)
+            assert isinstance(event, Event)
 
         # Test the case where the topic already exists
         mock_exists.return_value = (None, True)
@@ -236,26 +220,9 @@ class TestEnsign:
         ],
     )
     async def test_subscribe(self, mock_subscribe, topics, ensign):
-        events = [
-            event_pb2.Event(
-                data=b'{"foo": "bar"}',
-                mimetype=MIME.APPLICATION_JSON,
-            ),
-            event_pb2.Event(
-                data=b'{"bar": "bz"}',
-                mimetype=MIME.APPLICATION_JSON,
-            ),
-        ]
         ensign.topics.add("otters", ULID())
         ensign.topics.add("lighthouses", ULID())
-        mock_subscribe.return_value = async_iter(events)
-        recv = []
-        async for event in ensign.subscribe(topics):
-            recv.append(event)
-            if len(recv) == 2:
-                break
-        assert recv[0].data == events[0].data
-        assert recv[1].data == events[1].data
+        await ensign.subscribe(topics)
 
         # Ensure that ULID strings are passed to the subscribe call
         args, _ = mock_subscribe.call_args
@@ -284,14 +251,12 @@ class TestEnsign:
         mock_exists.return_value = (None, False)
         mock_list.return_value = ([topic_pb2.Topic(name="otters", id=ULID().bytes)], "")
         with pytest.raises(exception):
-            async for _ in ensign.subscribe(topics):
-                pass
+            await ensign.subscribe(topics)
 
     @pytest.mark.asyncio
     async def test_subscribe_no_topics(self, ensign):
         with pytest.raises(ValueError):
-            async for _ in ensign.subscribe():
-                pass
+            await ensign.subscribe()
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
@@ -472,19 +437,41 @@ class TestEnsign:
         await ensign.ensure_topic_exists(topic)
 
         # Run publish and subscribe as coroutines
+        publish_ack = asyncio.Event()
+
+        async def handle_ack(ack):
+            assert isinstance(ack, ensign_pb2.Ack)
+            publish_ack.set()
+
         async def pub():
             # Delay the publisher to prevent deadlock
             await asyncio.sleep(1)
-            await ensign.publish(topic, event)
+            await ensign.publish(topic, event, on_ack=handle_ack)
+            await publish_ack.wait()
+
+        received = None
+        subscribe_ack = asyncio.Event()
+
+        async def ack_event(e):
+            nonlocal received
+            await e.ack()
+            subscribe_ack.set()
+            received = e
 
         async def sub():
-            async for event in ensign.subscribe(topic):
-                return event
+            await ensign.subscribe(topic, on_event=ack_event)
+            await subscribe_ack.wait()
+            return received
 
-        _, event = await asyncio.gather(pub(), sub())
-        assert event.data == b"message in a bottle"
-        assert event.mimetype == MIME.TEXT_PLAIN
-        assert event.type.name == "Generic"
-        assert event.type.major_version == 1
-        assert event.type.minor_version == 0
-        assert event.type.patch_version == 0
+        _, recevied = await asyncio.gather(pub(), sub())
+        assert event.acked()
+        assert not event.nacked()
+        assert received.acked()
+        assert not received.nacked()
+        assert recevied.data == b"message in a bottle"
+        assert recevied.mimetype == MIME.TEXT_PLAIN
+        assert recevied.type.name == "Generic"
+        assert recevied.type.major_version == 1
+        assert recevied.type.minor_version == 0
+        assert recevied.type.patch_version == 0
+        assert recevied.id

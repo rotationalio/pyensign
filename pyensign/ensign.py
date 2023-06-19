@@ -1,6 +1,7 @@
 import os
 from ulid import ULID
 
+from pyensign.events import ack_event
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.connection import Connection
@@ -93,11 +94,15 @@ class Ensign:
 
         on_ack: coroutine (optional)
             A coroutine to be invoked when an ACK message is received from Ensign,
-            indicating that an event was successfully published.
+            indicating that an event was successfully published. The first argument of
+            the coroutine is an Ack object with a `committed` timestamp that indicates
+            when the event was committed.
 
         on_nack: coroutine (optional)
             A coroutine to be invoked when a NACK message is received from Ensign,
-            indicating that the event could not be published.
+            indicating that the event could not be published. The first argument of the
+            coroutine is a Nack object with a `code` field that indicates the reason
+            why the event was not published.
 
         ensure_exists: bool (optional)
             Create the topic if it does not exist. With this option, a topic name must
@@ -141,7 +146,7 @@ class Ensign:
         # TODO: Support user-defined generators
         async def next():
             for event in events:
-                yield event.proto()
+                yield event
 
         await self.client.publish(
             id,
@@ -150,7 +155,9 @@ class Ensign:
             on_nack=on_nack,
         )
 
-    async def subscribe(self, *topics, query="", consumer_group=None):
+    async def subscribe(
+        self, *topics, on_event=ack_event, query="", consumer_group=None
+    ):
         """
         Subscribe to events from the Ensign server.
 
@@ -158,6 +165,14 @@ class Ensign:
         ----------
         topics : iterable of str
             The topic names or IDs to subscribe to.
+
+        on_event: coroutine (optional)
+            A coroutine to process each event received from Ensign. The first argument
+            of the coroutine is an event.Event object. Subscribers should call either
+            ack() or nack() on the event to signal to the server if the event was
+            successfully processed or it needs to be redelivered to another subscriber
+            in the consumer group. If this argument is not provided, events are
+            automatically acked.
 
         query : str (optional)
             EnSQL query to filter events.
@@ -170,13 +185,8 @@ class Ensign:
         ValueError
             If no topics are provided.
 
-        EnsignTopicNotFoundError
+        UnknownTopicError
             If a topic is provided that does not exist.
-
-        Yields
-        ------
-        api.v1beta1.event_pb2.Event
-            The events received from the Ensign server.
         """
 
         # Handle a list of topics passed as a single argument
@@ -199,12 +209,13 @@ class Ensign:
             # Get the ID of the topic
             topic_ids.append(str(self._resolve_topic(topic)))
 
-        async for event in self.client.subscribe(
+        # Run the subscriber
+        await self.client.subscribe(
             topic_ids,
+            on_event,
             query=query,
             consumer_group=consumer_group,
-        ):
-            yield event
+        )
 
     async def get_topics(self):
         """

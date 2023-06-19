@@ -10,8 +10,7 @@ from pyensign.utils.tasks import WorkerPool
 from pyensign.stream import Publisher, Subscriber
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
-from pyensign.api.v1beta1.event import wrap, unwrap
-from pyensign.exceptions import EnsignError, EnsignClientClosingError
+from pyensign.exceptions import EnsignClientClosingError
 
 
 class Connection:
@@ -103,13 +102,12 @@ class Client:
 
         # Check if there is already an open stream for this topic
         if topic_hash in self.publishers:
-            queue = self.publishers[topic_hash].queue
+            publisher = self.publishers[topic_hash]
         else:
             # Create the publish stream for this topic
-            queue = BidiQueue()
             publisher = Publisher(
                 self,
-                queue,
+                topic_id,
                 on_ack=on_ack,
                 on_nack=on_nack,
             )
@@ -125,20 +123,11 @@ class Client:
                 done_callback=lambda: self.publishers.pop(topic_hash, None),
             )
 
-        async def queue_events():
-            async for event in events:
-                # If we're shutting down, stop queueing events
-                if self.shutdown.is_set():
-                    break
-
-                req = ensign_pb2.PublisherRequest(event=wrap(event, topic_id))
-                await queue.write_request(req)
-
         # Create a concurrent task to queue the events from the user
-        await self.pool.schedule(queue_events())
+        await self.pool.schedule(publisher.queue_events(events))
 
     @catch_rpc_error
-    async def subscribe(self, topic_ids, query="", consumer_group=None):
+    async def subscribe(self, topic_ids, on_event, query="", consumer_group=None):
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
 
@@ -147,14 +136,13 @@ class Client:
 
         # Check if there is already an open stream for these topics
         if topic_hash in self.subscribers:
-            queue = self.subscribers[topic_hash].queue
+            subscriber = self.subscribers[topic_hash]
         else:
             # Create the subscribe stream for these topics
-            queue = BidiQueue()
             subscriber = Subscriber(
                 self,
-                queue,
                 topic_ids,
+                on_event,
                 query=query,
                 consumer_group=consumer_group,
             )
@@ -170,21 +158,8 @@ class Client:
                 done_callback=lambda: self.subscribers.pop(topic_hash, None),
             )
 
-        # Yield events from the stream
-        while True:
-            rep = await queue.read_response()
-            if rep is None:
-                break
-            elif isinstance(rep, EnsignError):
-                raise rep
-            else:
-                # Ack back to the stream
-                # TODO: Allow the user to ack or nack the event
-                await queue.write_request(
-                    ensign_pb2.SubscribeRequest(ack=ensign_pb2.Ack(id=rep.id))
-                )
-
-                yield unwrap(rep)
+        # Consume the events as a concurrent task
+        await self.pool.schedule(subscriber.consume())
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):
@@ -268,48 +243,3 @@ class Client:
             await subscriber.close()
 
         await self.pool.release()
-
-
-class BidiQueue:
-    """
-    BidiQueue implements an in-memory bidirectional buffer for non-blocking
-    communication between coroutines.
-    """
-
-    def __init__(self, max_queue_size=100):
-        self._request_queue = asyncio.Queue(maxsize=max_queue_size)
-        self._response_queue = asyncio.Queue(maxsize=max_queue_size)
-
-    async def write_request(self, message):
-        """
-        Write a request to the queue, blocks if the queue is full.
-        """
-        await self._request_queue.put(message)
-
-    async def read_request(self):
-        """
-        Read a request from the queue, blocks if the queue is empty.
-        """
-        return await self._request_queue.get()
-
-    async def write_response(self, message):
-        """
-        Write a response to the queue, blocks if the queue is full.
-        """
-        await self._response_queue.put(message)
-
-    async def read_response(self):
-        """
-        Read a response from the queue, blocks if the queue is empty.
-        """
-        return await self._response_queue.get()
-
-    async def close(self):
-        """
-        Close the queue by sending a message to both the request and response queues.
-        The main purpose of this is to unblock pending consumers. Otherwise, consumers
-        will block indefinitely on read_request() or read_response(). This means that
-        consumers should be prepared to handle None responses from reads.
-        """
-        await self._request_queue.put(None)
-        await self._response_queue.put(None)
