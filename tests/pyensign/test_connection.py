@@ -319,7 +319,7 @@ class TestClient:
             assert isinstance(event, Event)
             await event.ack()
             event_ids.append(event.id)
-            if len(event_ids) >= 2:
+            if len(event_ids) >= 3:
                 acked.set()
 
         # Subscribe using an event callback.
@@ -328,7 +328,7 @@ class TestClient:
         # Wait for the callback to ack all the events.
         await acked.wait()
         await client.close()
-        assert len(event_ids) == 2
+        assert len(event_ids) == 3
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get("topic_name")

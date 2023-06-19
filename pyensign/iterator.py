@@ -60,6 +60,15 @@ class PublishResponseIterator(ResponseIterator):
     """
 
     def __init__(self, stream, pending, on_ack=None, on_nack=None):
+        """
+        Parameters
+        ----------
+        stream : grpc.aio.StreamStreamCall
+            The gRPC stream object which has been opened and is ready to be read from.
+        pending : dict
+            A dictionary of pending local ULIDs to events that have been published but
+            not yet acked or nacked.
+        """
         self.stream = stream
         self.pending = pending
         self.on_ack = on_ack
