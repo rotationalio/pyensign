@@ -25,9 +25,9 @@ class Ensign:
         self,
         client_id="",
         client_secret="",
+        cred_path="",
         endpoint="ensign.rotational.app:443",
         insecure=False,
-        cred_path="",
         auth_url="https://auth.rotational.app",
         disable_topic_cache=False,
     ):
@@ -42,6 +42,8 @@ class Ensign:
         client_secret : str
             The client secret part of the API key. If not provided, the client secret
             is loaded from the ENSIGN_CLIENT_SECRET environment variable.
+        cred_path: str (optional)
+            Load a JSON file containing the 'ClientID' and 'ClientSecret' key.
         endpoint : str (optional)
             The endpoint of the Ensign server.
         insecure : bool (optional)
@@ -52,19 +54,6 @@ class Ensign:
             Set to True to disable topic ID caching.
         """
 
-        """
-        Read the credentials from JSON  with provide path
-
-        Handle Exceptions:
-        --------------------------
-
-        FileNotFoundError  : File is not found
-        UnicodeDecodeError : Error in decoding the file
-        JSONDecodeError    : JSON format is invalid
-        IOError            : IO error while reading the file
-
-        """
-
         if cred_path:
             try:
                 with open(cred_path, "r") as file:
@@ -72,13 +61,13 @@ class Ensign:
                     client_id = data["ClientID"]
                     client_secret = data["ClientSecret"]
             except FileNotFoundError as e:
-                raise ValueError("File does not exist", str(e))
+                raise ValueError("Credentials file not found", str(e))
             except UnicodeDecodeError as e:
-                raise ValueError("Error in decoding the file", str(e))
+                raise ValueError("Error decoding credentials file", str(e))
             except json.JSONDecodeError as e:
-                raise json.JSONDecodeError("JSON format is invalid", str(e))
+                raise ValueError("Credentials file has invalid JSON", str(e))
             except IOError as e:
-                raise IOError("IO error while reading the file:", str(e))
+                raise ValueError("IO error while reading credentials file:", str(e))
 
         if not client_id or client_id == "":
             client_id = os.environ.get("ENSIGN_CLIENT_ID")
