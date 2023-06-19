@@ -15,7 +15,7 @@ def wrap(event, topic_id):
         raise TypeError("topic_id must be a ULID")
 
     return event_pb2.EventWrapper(
-        event=event.SerializeToString(), topic_id=topic_id.bytes
+        local_id=ULID().bytes, event=event.SerializeToString(), topic_id=topic_id.bytes
     )
 
 

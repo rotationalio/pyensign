@@ -119,6 +119,30 @@ class CacheMissError(PyEnsignError):
     pass
 
 
+class UnknownTopicError(PyEnsignError):
+    """
+    Raised when PyEnsign fails to parse a topic
+    """
+
+    pass
+
+
+class AckError(PyEnsignError):
+    """
+    Raised when PyEnsign could not ack an event
+    """
+
+    pass
+
+
+class NackError(PyEnsignError):
+    """
+    Raised when PyEnsign could not nack an event
+    """
+
+    pass
+
+
 class EnsignError(PyEnsignError):
     """
     Raised when PyEnsign receives an error from the Ensign server
@@ -162,6 +186,30 @@ class EnsignTopicCreateError(EnsignError):
 class EnsignTopicNotFoundError(EnsignError):
     """
     Raised when a topic could not be retrieved from Ensign
+    """
+
+    pass
+
+
+class EnsignInitError(EnsignError):
+    """
+    Raised when the Ensign client is not initialized
+    """
+
+    pass
+
+
+class EnsignTimeoutError(EnsignError):
+    """
+    Raised when the Ensign client times out waiting for a response from the server
+    """
+
+    pass
+
+
+class EnsignClientClosingError(EnsignError):
+    """
+    Raised when the Ensign client is closing but a request is made
     """
 
     pass
