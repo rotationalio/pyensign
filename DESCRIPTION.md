@@ -34,12 +34,14 @@ await client.publish("weather", event1, event2)
 await client.publish("weather", [event1, event2])
 ```
 
-Subscribe to one or more topic IDs. Topic IDs are assigned by Ensign so a common pattern is to first retrieve the topic ID from the topic name.
+Subscribe to one or more topics by providing the topic name(s) or ID(s) and specifying a callback to handle events.
 
 ```python
-topic_id = await client.topic_id("weather")
-async for event in client.subscribe(topic_id):
+async def print_event(event):
     print("Received event: {}".format(event))
+    event.Ack()
+
+await client.subscribe("weather", on_event=print_event)
 ```
 
 ## Advanced Usage
