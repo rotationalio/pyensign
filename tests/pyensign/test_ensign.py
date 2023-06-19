@@ -80,19 +80,32 @@ class TestEnsign:
         with mock.patch.dict(os.environ, {"ENSIGN_CLIENT_SECRET": client_secret}):
             Ensign(client_id=client_id)
 
+    def test_creds_json(self):
+        """
+        Test reading credentials from JSON file.
+        """
+        # set the path for json file
+        cred_path = "tests/fixtures/cred.json"
+        Ensign(cred_path=cred_path)
+
     @pytest.mark.parametrize(
-        "client_id, client_secret, exception",
+        "client_id, client_secret, cred_path, exception",
         [
-            (None, None, ValueError),
-            ("", "", ValueError),
-            ("id", "", ValueError),
-            ("", "secret", ValueError),
-            (1, 2, TypeError),
+            (None, None, "", ValueError),
+            ("", "", "", ValueError),
+            ("id", "", "", ValueError),
+            ("", "secret", "", ValueError),
+            (1, 2, "", TypeError),
+            ("", "", "tests/fixtures/cred_missing.json", ValueError),
+            ("", "", "tests/fixtures/cred.txt", ValueError),
+            ("", "", "tests/fixtures/cred_no_file.json", ValueError),
         ],
     )
-    def test_bad_creds(self, client_id, client_secret, exception):
+    def test_bad_creds(self, client_id, client_secret, cred_path, exception):
         with pytest.raises(exception), mock.patch.dict(os.environ, {}, clear=True):
-            Ensign(client_id=client_id, client_secret=client_secret)
+            Ensign(
+                client_id=client_id, client_secret=client_secret, cred_path=cred_path
+            )
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.publish")
