@@ -160,7 +160,7 @@ class Ensign:
 
     async def subscribe(self, *topic_ids, client_id="", query="", consumer_group=None):
         """
-        Subscribe to events from the Ensign server.
+        Subscribe to events from the Ensign Server.
 
         Parameters
         ----------
