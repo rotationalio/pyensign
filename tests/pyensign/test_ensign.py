@@ -81,7 +81,7 @@ class TestEnsign:
         """
         Test on reading JSON file for credentials.
         """
-        # set the path for json file
+        # set the path for Json File
         cred_path = "tests/fixtures/cred.json"
         Ensign(cred_path=cred_path)
 
