@@ -54,12 +54,12 @@ def async_iter(items):
 
 class TestEnsign:
     """
-    Tests for the Ensign client.
+    Tests for the Ensign Client.
     """
 
     def test_creds(self):
         """
-        Test creating an Ensign client from credentials.
+        Test creating an Ensign Client from credentials.
         """
         client_id = "id"
         client_secret = "secret"
