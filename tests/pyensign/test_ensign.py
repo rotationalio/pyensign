@@ -53,14 +53,6 @@ def ensign_no_cache():
     )
 
 
-def async_iter(items):
-    async def next():
-        for item in items:
-            yield item
-
-    return next()
-
-
 class TestEnsign:
     """
     Tests for the Ensign client.
