@@ -97,6 +97,49 @@ def main():
     asyncio.get_event_loop().run_until_complete(subscribe(topic))
 ```
 
+If you aren't comfortable with `asyncio` or need a more object-oriented interface, you can use the `Publisher` and `Subscriber` classes to implement your own publisher and subscriber apps.
+
+```python
+import time
+from pyensign.events import Event
+from pyensign.publisher import Publisher
+
+class MyPublisher(Publisher):
+    def source_events(self):
+        while True:
+            # Call an API and yield some events!
+            data = self.fetch_data()
+            yield Event(data=data, mimetype="application/json")
+            time.sleep(60)
+
+    def run_forever(self):
+        self.run(self.source_events())
+
+publisher = MyPublisher("my-topic")
+publisher.run_forever()
+```
+
+```python
+from pyensign.subscriber import Subscriber
+
+class MySubscriber(Subscriber):
+    async def handle_event(self, event):
+        # Process the event
+        ...
+
+        # Ack the event back to Ensign
+        event.ack()
+
+    def run_forever(self):
+        self.run(on_event=self.handle_event)
+        while True:
+            pass
+
+subscriber = MySubscriber("my-topic")
+subscriber.run_forever()
+```
+
+
 ## Contributing to PyEnsign
 
 Wow, you want to contribute to PyEnsign? 😍 We would absolutely love that!

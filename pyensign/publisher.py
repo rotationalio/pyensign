@@ -18,11 +18,16 @@ class Publisher(Ensign):
         Parameters
         ----------
         topic : str
-            The topic to publish events to.
+            The topic name or ID to publish events to.
 
         **kwargs
             Credentials and configuration for the Ensign client, see the Ensign class
             for more details.
+
+        Raises
+        ------
+        ValueError
+            If a topic is not provided.
         """
 
         super().__init__(**kwargs)

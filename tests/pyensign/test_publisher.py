@@ -27,6 +27,8 @@ class TestPublisher:
         ],
     )
     def test_bad_params(self, topic, kwargs, exception):
+        # Should raise an exception if no topic is provided or there are insufficient
+        # credentials to connect to Ensign.
         with pytest.raises(exception):
             Publisher(topic, **kwargs)
 

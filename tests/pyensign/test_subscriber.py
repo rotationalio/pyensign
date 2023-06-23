@@ -18,6 +18,8 @@ class TestSubscriber:
         ],
     )
     def test_bad_params(self, topics, kwargs, exception):
+        # Should raise an exception if no topic is provided or there are insufficient
+        # credentials to connect to Ensign.
         with pytest.raises(exception):
             Subscriber(*topics, **kwargs)
 

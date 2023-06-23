@@ -13,6 +13,20 @@ class Subscriber(Ensign):
         """
         Create a Subscriber to consume events from a set of topics. Once initialized,
         call run() to start consuming events from the topics.
+
+        Parameters
+        ----------
+        *topics : iterable of str
+            The topic names or IDs to consume events from.
+
+        **kwargs
+            Credentials and configuration for the Ensign client, see the Ensign class
+            for more details.
+
+        Raises
+        ------
+        ValueError
+            If no topics are provided.
         """
 
         super().__init__(**kwargs)
