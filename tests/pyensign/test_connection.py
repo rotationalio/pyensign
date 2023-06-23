@@ -6,6 +6,7 @@ from grpc import RpcError
 from pytest_httpserver import HTTPServer
 
 from pyensign.events import Event
+from pyensign.utils.topics import Topic
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
@@ -14,6 +15,8 @@ from pyensign.connection import Connection
 from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
+
+from pyensign.exceptions import EnsignTopicNotFoundError
 
 
 @pytest.fixture
@@ -128,6 +131,9 @@ class MockConnection(Connection):
         pass
 
 
+OTTERS_TOPIC = Topic(id=ULID(), name="otters")
+
+
 class MockServicer(ensign_pb2_grpc.EnsignServicer):
     """
     Minimal mock of the Ensign service so we can exercise the client code directly in
@@ -146,7 +152,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         stream_ready = ensign_pb2.StreamReady(
             client_id="client_id",
             server_id="server_id",
-            topics={"topic_name": ULID().bytes},
+            topics={OTTERS_TOPIC.name: OTTERS_TOPIC.id.bytes},
         )
         yield ensign_pb2.PublisherReply(ready=stream_ready)
 
@@ -172,7 +178,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         stream_ready = ensign_pb2.StreamReady(
             client_id="client_id",
             server_id="server_id",
-            topics={"topic_name": ULID().bytes},
+            topics={OTTERS_TOPIC.name: OTTERS_TOPIC.id.bytes},
         )
         yield ensign_pb2.SubscribeReply(ready=stream_ready)
 
@@ -240,8 +246,15 @@ class TestClient:
     Test that the client uses the stub correctly.
     """
 
-    async def test_publish(self, client):
-        topic_id = ULID()
+    @pytest.mark.parametrize(
+        "topic",
+        [
+            Topic(id=OTTERS_TOPIC.id),
+            Topic(name=OTTERS_TOPIC.name),
+            OTTERS_TOPIC,
+        ],
+    )
+    async def test_publish(self, topic, client):
         events = [
             Event(data=b"event 1", mimetype="text/plain"),
             Event(data=b"event 2", mimetype="text/plain"),
@@ -259,13 +272,13 @@ class TestClient:
             if len(ack_ids) >= 3:
                 published.set()
 
-        await client.publish(topic_id, source_events(events), on_ack=record_acks)
+        await client.publish(topic, source_events(events), on_ack=record_acks)
 
         # Should be able to resume publishing to an existing stream.
         more_events = [
             Event(data=b"event 3", mimetype="text/plain"),
         ]
-        await client.publish(topic_id, source_events(more_events), on_ack=record_acks)
+        await client.publish(topic, source_events(more_events), on_ack=record_acks)
         await published.wait()
 
         await client.close()
@@ -276,11 +289,10 @@ class TestClient:
             assert event.acked()
 
         # Topic IDs from the server should be saved in the client.
-        id = client.topics.get("topic_name")
-        assert isinstance(id, ULID)
+        id = client.topics.get(OTTERS_TOPIC.name)
+        assert id == OTTERS_TOPIC.id
 
     async def test_publish_reconnect(self, client):
-        topic_id = ULID()
         ack_ids = []
         published = asyncio.Event()
 
@@ -297,7 +309,7 @@ class TestClient:
                 published.set()
 
         # Publish events to a server that closes the stream every 3 events.
-        await client.publish(topic_id, source_events(), on_ack=record_acks)
+        await client.publish(OTTERS_TOPIC, source_events(), on_ack=record_acks)
         await published.wait()
 
         # The client should have reconnected at least once and the mock server sends 3
@@ -306,8 +318,19 @@ class TestClient:
         assert len(ack_ids) % 3 == 0
 
         # Topic IDs from the server should be saved in the client.
-        id = client.topics.get("topic_name")
-        assert isinstance(id, ULID)
+        id = client.topics.get(OTTERS_TOPIC.name)
+        assert id == OTTERS_TOPIC.id
+
+    @pytest.mark.parametrize(
+        "topic",
+        [
+            Topic(id=ULID()),
+            Topic(name="unknown-topic"),
+        ],
+    )
+    async def test_publish_unknown_topic(self, topic, client):
+        with pytest.raises(EnsignTopicNotFoundError):
+            await client.publish(topic, [])
 
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
@@ -331,7 +354,7 @@ class TestClient:
         assert len(event_ids) == 3
 
         # Topic IDs from the server should be saved in the client.
-        id = client.topics.get("topic_name")
+        id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
 
     async def test_subscribe_reconnect(self, client):
@@ -356,11 +379,11 @@ class TestClient:
         assert len(event_ids) % 3 == 0
 
         # Topic IDs from the server should be saved in the client.
-        id = client.topics.get("topic_name")
+        id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
 
     async def test_pub_sub(self, client):
-        topic_id = ULID()
+        topic = OTTERS_TOPIC
         events = [
             Event(data=b"event 1", mimetype="text/plain"),
             Event(data=b"event 2", mimetype="text/plain"),
@@ -378,7 +401,7 @@ class TestClient:
             for event in events:
                 yield event
 
-        await client.publish(topic_id, source_events(), on_ack=record_acks)
+        await client.publish(topic, source_events(), on_ack=record_acks)
 
         async def ack_event(event):
             nonlocal event_ids
