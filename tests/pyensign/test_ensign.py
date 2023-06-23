@@ -436,12 +436,10 @@ class TestEnsign:
 
         ensign = Ensign(endpoint=ensignserver, auth_url=authserver)
         event = Event(b"message in a bottle", "text/plain")
-        topic = "not-a-topic"
-
-        await ensign.publish(topic, event)
+        topic = "pyensign-pub-sub"
 
         # Ensure the topic exists
-        # await ensign.ensure_topic_exists(topic)
+        await ensign.ensure_topic_exists(topic)
 
         # Run publish and subscribe as coroutines
         publish_ack = asyncio.Event()
