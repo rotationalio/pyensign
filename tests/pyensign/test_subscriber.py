@@ -1,3 +1,6 @@
+import os
+from unittest import mock
+
 import pytest
 from asyncmock import patch
 
@@ -20,7 +23,7 @@ class TestSubscriber:
     def test_bad_params(self, topics, kwargs, exception):
         # Should raise an exception if no topic is provided or there are insufficient
         # credentials to connect to Ensign.
-        with pytest.raises(exception):
+        with pytest.raises(exception), mock.patch.dict(os.environ, {}, clear=True):
             Subscriber(*topics, **kwargs)
 
     @patch("pyensign.ensign.Ensign.subscribe")
