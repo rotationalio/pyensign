@@ -29,7 +29,7 @@ class Ensign:
         disable_topic_cache=False,
     ):
         """
-        Create a new Ensign client with API credentials.
+        Create a new Ensign Client with API credentials.
 
         Parameters
         ----------
