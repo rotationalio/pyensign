@@ -178,7 +178,9 @@ class Ensign:
         self, *topics, on_event=ack_event, query="", consumer_group=None
     ):
         """
-        Subscribe to events from the Ensign server.
+        Subscribe to events from the Ensign server. This method returns immediately and
+        does not wait for events to be consumed from the topics. To implement a blocking
+        subscriber, callers can use `await asyncio.Future()`.
 
         Parameters
         ----------
