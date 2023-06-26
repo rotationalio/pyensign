@@ -4,7 +4,7 @@ from ulid import ULID
 
 from pyensign.events import ack_event
 from pyensign.connection import Client
-from pyensign.utils.cache import Cache
+from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
@@ -90,11 +90,7 @@ class Ensign:
         auth = AuthClient(auth_url, creds)
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
 
-        if disable_topic_cache:
-            self.topics = None
-        else:
-            self.topics = Cache()
-
+        self.topics = TopicCache(read_only=disable_topic_cache)
         self.client = Client(connection, topic_cache=self.topics)
 
     async def publish(
@@ -156,11 +152,19 @@ class Ensign:
         if len(events) == 0:
             raise ValueError("no events provided")
 
-        # Resolve the topic ID from the name or ID string
         if ensure_exists:
+            # Get or create the topic if it doesn't exist
             id = ULID.from_str(await self.ensure_topic_exists(topic))
+            topic = Topic(id=id, name=topic)
         else:
-            id = self._resolve_topic(topic)
+            try:
+                # Try to resolve the topic ID from the string
+                topic = Topic(id=self.topics.resolve(topic))
+            except CacheMissError:
+                # Assume the topic string is a name, the publisher will make a best
+                # effort to resolve the ID from the name using the response from the
+                # server
+                topic = Topic(name=topic)
 
         # TODO: Support user-defined generators
         async def next():
@@ -168,7 +172,7 @@ class Ensign:
                 yield event
 
         await self.client.publish(
-            id,
+            topic,
             next(),
             on_ack=on_ack,
             on_nack=on_nack,
@@ -227,8 +231,13 @@ class Ensign:
                     "expected type 'str' for topic, got {}".format(type(topic))
                 )
 
-            # Get the ID of the topic
-            topic_ids.append(str(self._resolve_topic(topic)))
+            # Attempt to lookup or parse the ID
+            try:
+                topic_ids.append(str(self.topics.resolve(topic)))
+            except CacheMissError:
+                # Ignore unknown names for now, the server will decide if they are
+                # valid
+                topic_ids.append(topic)
 
         # Run the subscriber
         await self.client.subscribe(
@@ -436,25 +445,3 @@ class Ensign:
 
         status, version, uptime, _, _ = await self.client.status()
         return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
-
-    def _resolve_topic(self, topic):
-        """
-        Resolve a topic string into a ULID by looking it up in the cache, otherwise
-        assume it's a topic ID and try to parse it.
-        """
-
-        # Attempt to retrieve the topic ID from the cache
-        if self.topics is not None:
-            try:
-                return self.topics.get(topic)
-            except CacheMissError:
-                pass
-
-        # Otherwise attempt to parse as a ULID
-        try:
-            return ULID.from_str(topic)
-        except ValueError:
-            # TODO: Might need to return the name of the project here
-            raise UnknownTopicError(
-                f"unknown topic '{topic}', please provide the name or ID of a topic in your project"
-            )

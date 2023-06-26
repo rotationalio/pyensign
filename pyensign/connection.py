@@ -4,13 +4,20 @@ from ulid import ULID
 from grpc import aio
 from datetime import timedelta
 
+from pyensign.utils.topics import Topic
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.tasks import WorkerPool
 from pyensign.stream import Publisher, Subscriber
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
-from pyensign.exceptions import EnsignClientClosingError
+from pyensign.exceptions import (
+    EnsignClientClosingError,
+    CacheMissError,
+    UnknownTopicError,
+    EnsignTopicNotFoundError,
+    EnsignTypeError,
+)
 
 
 class Connection:
@@ -93,29 +100,36 @@ class Client:
             self.client_id = client_id
 
     @catch_rpc_error
-    async def publish(self, topic_id, events, on_ack=None, on_nack=None):
+    async def publish(self, topic, events, on_ack=None, on_nack=None):
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
 
-        # Create a hash of the topic ID
-        topic_hash = str(topic_id)
+        # Attempt to hash the topic, which fails if there is no topic ID
+        try:
+            topic_hash = hash(topic)
+        except ValueError:
+            topic_hash = None
 
-        # Check if there is already an open stream for this topic
-        if topic_hash in self.publishers:
+        # Check if there is already an open publish stream for this topic
+        if topic_hash and topic_hash in self.publishers:
             publisher = self.publishers[topic_hash]
         else:
             # Create the publish stream for this topic
             publisher = Publisher(
                 self,
-                topic_id,
+                topic,
                 on_ack=on_ack,
                 on_nack=on_nack,
             )
-            self.publishers[topic_hash] = publisher
 
             # Connect to the publish stream
             # TODO: Distinguish between authentication errors, topic errors, and connection errors
             await publisher.connect()
+
+            # After connect we should have the topic ID from the server, so compute the
+            # hash and save the open publisher stream
+            topic_hash = hash(topic)
+            self.publishers[topic_hash] = publisher
 
             # Run the publisher as a concurrent task which handles reconnects
             await self.pool.schedule(
@@ -127,12 +141,12 @@ class Client:
         await self.pool.schedule(publisher.queue_events(events))
 
     @catch_rpc_error
-    async def subscribe(self, topic_ids, on_event, query="", consumer_group=None):
+    async def subscribe(self, topics, on_event, query="", consumer_group=None):
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
 
-        # Create a hash of the topic IDs
-        topic_hash = frozenset([id for id in topic_ids])
+        # Create a hash of the topics
+        topic_hash = frozenset([t for t in topics])
 
         # Check if there is already an open stream for these topics
         if topic_hash in self.subscribers:
@@ -141,7 +155,7 @@ class Client:
             # Create the subscribe stream for these topics
             subscriber = Subscriber(
                 self,
-                topic_ids,
+                topics,
                 on_event,
                 query=query,
                 consumer_group=consumer_group,
