@@ -161,7 +161,9 @@ class Ensign:
                 # Try to resolve the topic ID from the string
                 topic = Topic(id=self.topics.resolve(topic))
             except CacheMissError:
-                # Assume the topic string is a name
+                # Assume the topic string is a name, the publisher will make a best
+                # effort to resolve the ID from the name using the response from the
+                # server
                 topic = Topic(name=topic)
 
         # TODO: Support user-defined generators
@@ -169,17 +171,12 @@ class Ensign:
             for event in events:
                 yield event
 
-        try:
-            await self.client.publish(
-                topic,
-                next(),
-                on_ack=on_ack,
-                on_nack=on_nack,
-            )
-        except EnsignTopicNotFoundError as e:
-            raise UnknownTopicError(
-                "topic not found, please specify the name or ID of a topic in your project"
-            ) from e
+        await self.client.publish(
+            topic,
+            next(),
+            on_ack=on_ack,
+            on_nack=on_nack,
+        )
 
     async def subscribe(
         self, *topics, on_event=ack_event, query="", consumer_group=None

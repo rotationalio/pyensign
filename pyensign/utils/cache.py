@@ -9,6 +9,16 @@ class Cache:
     """
 
     def __init__(self, read_only=False):
+        """
+        Create a new cache.
+
+        Parameters
+        ----------
+        read_only : bool (default: False)
+            If True, the cache will not be writeable. This creates a disabled cache
+            where get() will always raise a CacheMissError, exists() will always return
+            False, and add() is a no-op.
+        """
         self._index = {}
         self._read_only = read_only
 

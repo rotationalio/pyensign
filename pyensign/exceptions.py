@@ -85,6 +85,8 @@ def _handle_client_error(e):
         raise EnsignAttributeError(
             "error accessing field from Ensign response: {}".format(e)
         ) from e
+    elif isinstance(e, EnsignTopicNotFoundError):
+        raise UnknownTopicError(e.topic) from e
     elif isinstance(e, EnsignTypeError):
         raise EnsignTypeError("unexpected type in Ensign response: {}".format(e)) from e
     elif isinstance(e, EnsignInitError):
@@ -106,6 +108,20 @@ def _handle_client_error(e):
 ##########################################################################
 ## PyEnsign Exceptions
 ##########################################################################
+
+
+class TopicNotFoundError(Exception):
+    """
+    Raised when a topic is not found
+    """
+
+    def __init__(self, topic):
+        self.topic = topic
+
+    def __str__(self):
+        return "topic not found: {}".format(self.topic)
+
+    pass
 
 
 class PyEnsignError(Exception):
@@ -132,10 +148,15 @@ class CacheMissError(PyEnsignError):
     pass
 
 
-class UnknownTopicError(PyEnsignError):
+class UnknownTopicError(PyEnsignError, TopicNotFoundError):
     """
     Raised when PyEnsign fails to parse a topic
     """
+
+    def __str__(self):
+        return "unknown topic: {}, please specify the name or ID of a topic in your project".format(
+            self.topic
+        )
 
     pass
 
@@ -206,10 +227,24 @@ class EnsignTopicCreateError(EnsignError):
     pass
 
 
-class EnsignTopicNotFoundError(EnsignError):
+class EnsignInvalidTopicError(EnsignError, ValueError):
+    """
+    Raised when a topic does not have all required fields
+    """
+
+    pass
+
+
+class EnsignTopicNotFoundError(EnsignError, TopicNotFoundError):
     """
     Raised when a topic could not be retrieved from Ensign
     """
+
+    def __init__(self, topic):
+        self.topic = topic
+
+    def __str__(self):
+        return "topic not found: {}".format(self.topic)
 
     pass
 

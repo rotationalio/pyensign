@@ -126,9 +126,12 @@ class Client:
             # TODO: Distinguish between authentication errors, topic errors, and connection errors
             await publisher.connect()
 
-            # Run the publisher as a concurrent task which handles reconnects
+            # After connect we should have the topic ID from the server, so compute the
+            # hash and save the open publisher stream
             topic_hash = hash(topic)
             self.publishers[topic_hash] = publisher
+
+            # Run the publisher as a concurrent task which handles reconnects
             await self.pool.schedule(
                 publisher.run(),
                 done_callback=lambda: self.publishers.pop(topic_hash, None),

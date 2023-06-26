@@ -231,7 +231,7 @@ class TestEnsign:
     ):
         ensign.topics.add("otters", ULID())
         if not exists:
-            mock_publish.side_effect = EnsignTopicNotFoundError()
+            mock_publish.side_effect = UnknownTopicError(topic)
 
         with pytest.raises(exception):
             await ensign.publish(topic, events)

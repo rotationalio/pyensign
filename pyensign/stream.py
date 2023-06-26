@@ -12,6 +12,7 @@ from pyensign.exceptions import (
     EnsignTypeError,
     EnsignTimeoutError,
     EnsignInitError,
+    EnsignInvalidTopicError,
     EnsignTopicNotFoundError,
 )
 from pyensign.iterator import (
@@ -221,17 +222,13 @@ class Publisher(StreamHandler):
                 self.topic.id not in self._topics.values()
                 and str(self.topic.id) not in self._topics
             ):
-                raise EnsignTopicNotFoundError(
-                    "topic not found by ID: {}".format(self.topic.id)
-                )
+                raise EnsignTopicNotFoundError(self.topic.id)
         elif self.topic.name:
             self.topic.id = self._topics.get(self.topic.name, None)
             if not self.topic.id:
-                raise EnsignTopicNotFoundError(
-                    "topic not found by name: {}".format(self.topic.name)
-                )
+                raise EnsignTopicNotFoundError(self.topic.id)
         else:
-            raise EnsignTopicNotFoundError("topic has no name or ID")
+            raise EnsignInvalidTopicError("topic has no name or ID")
 
 
 class Subscriber(StreamHandler):

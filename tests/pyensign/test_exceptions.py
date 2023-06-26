@@ -5,12 +5,14 @@ from grpc import RpcError, StatusCode
 
 from pyensign.exceptions import (
     EnsignRPCError,
+    EnsignTopicNotFoundError,
     EnsignTypeError,
     EnsignInitError,
     EnsignClientClosingError,
     EnsignAttributeError,
     EnsignTimeoutError,
     PyEnsignError,
+    UnknownTopicError,
 )
 from pyensign.exceptions import catch_rpc_error
 
@@ -20,6 +22,11 @@ from pyensign.exceptions import catch_rpc_error
     "exception, expected, match",
     [
         (AttributeError("error"), EnsignAttributeError, "error"),
+        (
+            EnsignTopicNotFoundError("topic"),
+            UnknownTopicError,
+            "unknown topic: topic, please specify the name or ID of a topic in your project",
+        ),
         (EnsignTypeError("error"), EnsignTypeError, "error"),
         (EnsignInitError("error"), EnsignInitError, "error"),
         (EnsignTimeoutError("error"), EnsignTimeoutError, "error"),

@@ -16,7 +16,7 @@ from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 
-from pyensign.exceptions import EnsignTopicNotFoundError
+from pyensign.exceptions import UnknownTopicError
 
 
 @pytest.fixture
@@ -329,7 +329,7 @@ class TestClient:
         ],
     )
     async def test_publish_unknown_topic(self, topic, client):
-        with pytest.raises(EnsignTopicNotFoundError):
+        with pytest.raises(UnknownTopicError):
             await client.publish(topic, [])
 
     async def test_subscribe(self, client):
