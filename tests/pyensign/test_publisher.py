@@ -1,3 +1,6 @@
+import os
+from unittest import mock
+
 import pytest
 from asyncmock import call, patch
 
@@ -29,7 +32,7 @@ class TestPublisher:
     def test_bad_params(self, topic, kwargs, exception):
         # Should raise an exception if no topic is provided or there are insufficient
         # credentials to connect to Ensign.
-        with pytest.raises(exception):
+        with pytest.raises(exception), mock.patch.dict(os.environ, {}, clear=True):
             Publisher(topic, **kwargs)
 
     @patch("pyensign.ensign.Ensign.publish")
