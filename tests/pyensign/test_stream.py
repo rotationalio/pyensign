@@ -2,12 +2,12 @@ import grpc
 import pytest
 import asyncio
 from ulid import ULID
-from asyncmock import patch
+from asyncmock import patch, AsyncMock
 from datetime import timedelta
 from unittest.mock import Mock
 
 from pyensign.api.v1beta1.event import wrap, unwrap
-from pyensign.api.v1beta1 import ensign_pb2, event_pb2
+from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.stream import StreamHandler, Publisher, Subscriber
 from pyensign.iterator import ResponseIterator
 from pyensign.utils.queue import BidiQueue
@@ -34,7 +34,7 @@ class TestStreamHandler:
             BidiQueue(),
             reconnect_tick=timedelta(milliseconds=1),
         )
-        stream._responses = Mock(spec=ResponseIterator)
+        stream._responses = AsyncMock(spec=ResponseIterator)
 
         # Run the stream handler in a separate task, which should reconnect a few times
         task = asyncio.create_task(stream.run())
@@ -61,7 +61,7 @@ class TestStreamHandler:
             reconnect_tick=timedelta(milliseconds=1),
             reconnect_timeout=timedelta(milliseconds=5),
         )
-        stream._responses = Mock(spec=ResponseIterator)
+        stream._responses = AsyncMock(spec=ResponseIterator)
 
         # Run the stream handler which should fail to reconnect
         with pytest.raises(EnsignTimeoutError):
