@@ -56,5 +56,5 @@ async def handle_ack(self, ack):
 async def handle_nack(self, nack):
     print(f"Could not commit event {nack.id} with error {nack.code}: {nack.error}")
 
-await client.publish("weather", event, ack_callback=handle_ack, nack_callback=handle_nack)
+await client.publish("weather", event, on_ack=handle_ack, on_nack=handle_nack)
 ```

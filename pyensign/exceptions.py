@@ -6,15 +6,13 @@ from functools import wraps
 ## Decorators
 ##########################################################################
 
-_except = (RpcError, AttributeError)
-
 
 def _wrap_rpc(fn):
     @wraps(fn)
     def wrap(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except _except as e:
+        except Exception as e:
             _handle_client_error(e)
 
     return wrap
@@ -25,7 +23,7 @@ def _wrap_async_rpc(coro):
     async def wrap(*args, **kwargs):
         try:
             return await coro(*args, **kwargs)
-        except _except as e:
+        except Exception as e:
             _handle_client_error(e)
 
     return wrap
@@ -37,7 +35,7 @@ def _wrap_generator(fn):
         try:
             for rep in fn(*args, **kwargs):
                 yield rep
-        except _except as e:
+        except Exception as e:
             _handle_client_error(e)
 
     return wrap
@@ -49,7 +47,7 @@ def _wrap_async_generator(coro):
         try:
             async for rep in coro(*args, **kwargs):
                 yield rep
-        except _except as e:
+        except Exception as e:
             _handle_client_error(e)
 
     return wrap
@@ -81,18 +79,49 @@ def _handle_client_error(e):
     """
 
     if isinstance(e, RpcError):
-        raise EnsignRPCError("Received gRPC error from server: {}".format(e)) from e
+        code = e.code()
+        raise EnsignRPCError(code.name, code.value, e.details()) from e
     elif isinstance(e, AttributeError):
         raise EnsignAttributeError(
-            "Error accessing field from response: {}".format(e)
+            "error accessing field from Ensign response: {}".format(e)
+        ) from e
+    elif isinstance(e, EnsignTopicNotFoundError):
+        raise UnknownTopicError(e.topic) from e
+    elif isinstance(e, EnsignTypeError):
+        raise EnsignTypeError("unexpected type in Ensign response: {}".format(e)) from e
+    elif isinstance(e, EnsignInitError):
+        raise EnsignInitError(
+            "error processing request: client is not connected"
+        ) from e
+    elif isinstance(e, EnsignTimeoutError):
+        raise EnsignTimeoutError(
+            "timeout exceeded while connecting to Ensign: {}".format(e)
+        ) from e
+    elif isinstance(e, EnsignClientClosingError):
+        raise EnsignClientClosingError(
+            "error processing request: client is already closing"
         ) from e
     else:
-        raise PyEnsignError("Unknown error: {}".format(e)) from e
+        raise PyEnsignError("unknown error: {}".format(e)) from e
 
 
 ##########################################################################
 ## PyEnsign Exceptions
 ##########################################################################
+
+
+class TopicNotFoundError(Exception):
+    """
+    Raised when a topic is not found
+    """
+
+    def __init__(self, topic):
+        self.topic = topic
+
+    def __str__(self):
+        return "topic not found: {}".format(self.topic)
+
+    pass
 
 
 class PyEnsignError(Exception):
@@ -119,10 +148,15 @@ class CacheMissError(PyEnsignError):
     pass
 
 
-class UnknownTopicError(PyEnsignError):
+class UnknownTopicError(PyEnsignError, TopicNotFoundError):
     """
     Raised when PyEnsign fails to parse a topic
     """
+
+    def __str__(self):
+        return "unknown topic: {}, please specify the name or ID of a topic in your project".format(
+            self.topic
+        )
 
     pass
 
@@ -156,6 +190,16 @@ class EnsignRPCError(EnsignError):
     Raised when PyEnsign receives a gRPC error from the Ensign server
     """
 
+    def __init__(self, name, code, details):
+        self.name = name
+        self.code = code
+        self.details = details
+
+    def __str__(self):
+        return "received gRPC error from Ensign: {}: {} ({})".format(
+            self.name, self.details, self.code
+        )
+
     pass
 
 
@@ -183,10 +227,24 @@ class EnsignTopicCreateError(EnsignError):
     pass
 
 
-class EnsignTopicNotFoundError(EnsignError):
+class EnsignInvalidTopicError(EnsignError, ValueError):
+    """
+    Raised when a topic does not have all required fields
+    """
+
+    pass
+
+
+class EnsignTopicNotFoundError(EnsignError, TopicNotFoundError):
     """
     Raised when a topic could not be retrieved from Ensign
     """
+
+    def __init__(self, topic):
+        self.topic = topic
+
+    def __str__(self):
+        return "topic not found: {}".format(self.topic)
 
     pass
 

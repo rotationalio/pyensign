@@ -1,7 +1,19 @@
-import pytest
-from grpc import RpcError
+import re
 
-from pyensign.exceptions import EnsignRPCError, EnsignAttributeError
+import pytest
+from grpc import RpcError, StatusCode
+
+from pyensign.exceptions import (
+    EnsignRPCError,
+    EnsignTopicNotFoundError,
+    EnsignTypeError,
+    EnsignInitError,
+    EnsignClientClosingError,
+    EnsignAttributeError,
+    EnsignTimeoutError,
+    PyEnsignError,
+    UnknownTopicError,
+)
 from pyensign.exceptions import catch_rpc_error
 
 
@@ -9,8 +21,17 @@ from pyensign.exceptions import catch_rpc_error
 @pytest.mark.parametrize(
     "exception, expected, match",
     [
-        (RpcError("error"), EnsignRPCError, "error"),
         (AttributeError("error"), EnsignAttributeError, "error"),
+        (
+            EnsignTopicNotFoundError("topic"),
+            UnknownTopicError,
+            "unknown topic: topic, please specify the name or ID of a topic in your project",
+        ),
+        (EnsignTypeError("error"), EnsignTypeError, "error"),
+        (EnsignInitError("error"), EnsignInitError, "error"),
+        (EnsignTimeoutError("error"), EnsignTimeoutError, "error"),
+        (EnsignClientClosingError("error"), EnsignClientClosingError, "error"),
+        (ZeroDivisionError("error"), PyEnsignError, "error"),
     ],
 )
 async def test_error_decorator(exception, expected, match):
@@ -48,4 +69,29 @@ async def test_error_decorator(exception, expected, match):
     with pytest.raises(expected, match=match) as exc_info:
         async for _ in coro_gen():
             pass
+    assert len(exc_info.traceback) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "code, details",
+    [
+        (StatusCode.UNAUTHENTICATED, "unauthenticated"),
+        (StatusCode.PERMISSION_DENIED, "permission denied"),
+        (StatusCode.NOT_FOUND, "not found"),
+    ],
+)
+async def test_rpc_meta(code, details):
+    @catch_rpc_error
+    def fn():
+        # Note: It's not possible to create a RpcError with the code and detatils
+        # directly so this is a hack
+        e = RpcError()
+        e.code = lambda: code
+        e.details = lambda: details
+        raise e
+
+    match = re.escape(EnsignRPCError(code.name, code.value, details).__str__())
+    with pytest.raises(EnsignRPCError, match=match) as exc_info:
+        fn()
     assert len(exc_info.traceback) == 3

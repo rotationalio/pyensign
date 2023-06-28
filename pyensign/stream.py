@@ -12,6 +12,8 @@ from pyensign.exceptions import (
     EnsignTypeError,
     EnsignTimeoutError,
     EnsignInitError,
+    EnsignInvalidTopicError,
+    EnsignTopicNotFoundError,
 )
 from pyensign.iterator import (
     RequestIterator,
@@ -109,12 +111,11 @@ class StreamHandler:
                 id = ULID(id_bytes)
             except ValueError:
                 # Ignore unparseable topic IDs
-                pass
+                continue
 
             # Update the topic cache
             self._topics[name] = id
-            if self.topic_cache:
-                self.topic_cache.add(name, id)
+            self.topic_cache.add(name, id)
 
     def reset_timeout(self):
         self.timeout = datetime.now() + self.reconnect_timeout
@@ -144,12 +145,12 @@ class Publisher(StreamHandler):
     def __init__(
         self,
         client,
-        topic_id,
+        topic,
         on_ack=None,
         on_nack=None,
     ):
         super().__init__(client, BidiQueue())
-        self.topic_id = topic_id
+        self.topic = topic
         self.on_ack = on_ack
         self.on_nack = on_nack
         self.pending = {}
@@ -175,6 +176,13 @@ class Publisher(StreamHandler):
         # Save the topics from the ready message
         self._parse_topics(rep.ready.topics)
 
+        # Set the topic ID for publish requests
+        try:
+            self._update_topic()
+        except EnsignTopicNotFoundError as e:
+            await self.close()
+            raise e
+
         # Create the response iterator from the gRPC stream
         self._responses = PublishResponseIterator(
             stream, self.pending, on_ack=self.on_ack, on_nack=self.on_nack
@@ -191,7 +199,7 @@ class Publisher(StreamHandler):
                 break
 
             # Queue the event
-            wrapper = wrap(event.proto(), self.topic_id)
+            wrapper = wrap(event.proto(), self.topic.id)
             req = ensign_pb2.PublisherRequest(event=wrapper)
             await self.queue.write_request(req)
             event.mark_published()
@@ -199,6 +207,28 @@ class Publisher(StreamHandler):
             # Save the event for ack/nack handling
             # TODO: How do we handle events that are never acked/nacked?
             self.pending[wrapper.local_id] = event
+
+    def _update_topic(self):
+        """
+        Set the topic ID for the publisher by performing a lookup into the map. An
+        exception is raised if the topic is not in the map, which implies that the
+        topic does not exist or it was created after the stream was opened.
+        """
+
+        if self.topic.id:
+            # If topic ID is already set, ensure that it exists
+            # Edge case: The topic name looks like a topic ID
+            if (
+                self.topic.id not in self._topics.values()
+                and str(self.topic.id) not in self._topics
+            ):
+                raise EnsignTopicNotFoundError(self.topic.id)
+        elif self.topic.name:
+            self.topic.id = self._topics.get(self.topic.name, None)
+            if not self.topic.id:
+                raise EnsignTopicNotFoundError(self.topic.id)
+        else:
+            raise EnsignInvalidTopicError("topic has no name or ID")
 
 
 class Subscriber(StreamHandler):
@@ -215,14 +245,14 @@ class Subscriber(StreamHandler):
     def __init__(
         self,
         client,
-        topic_ids,
+        topics,
         on_event,
         query="",
         consumer_group=None,
     ):
         super().__init__(client, BidiQueue())
         self.on_event = on_event
-        self.topic_ids = topic_ids
+        self.topics = topics
         self.query = query
         self.consumer_group = consumer_group
 
@@ -236,7 +266,7 @@ class Subscriber(StreamHandler):
         sub = ensign_pb2.SubscribeRequest(
             subscription=ensign_pb2.Subscription(
                 client_id=self.client_id,
-                topics=self.topic_ids,
+                topics=self.topics,
                 query=self.query,
                 group=self.consumer_group,
             )

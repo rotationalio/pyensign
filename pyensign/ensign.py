@@ -4,7 +4,7 @@ from ulid import ULID
 
 from pyensign.events import ack_event
 from pyensign.connection import Client
-from pyensign.utils.cache import Cache
+from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
@@ -90,10 +90,8 @@ class Ensign:
         auth = AuthClient(auth_url, creds)
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
 
-        if disable_topic_cache:
-            self.topics = None
-        else:
-            self.topics = Cache()
+        self.topics = TopicCache(read_only=disable_topic_cache)
+        self.client = Client(connection, topic_cache=self.topics)
 
         self.client = Client(connection, topic_cache=self.topics)
 
@@ -156,11 +154,19 @@ class Ensign:
         if len(events) == 0:
             raise ValueError("no events provided")
 
-        # Resolve the topic ID from the name or ID string
         if ensure_exists:
+            # Get or create the topic if it doesn't exist
             id = ULID.from_str(await self.ensure_topic_exists(topic))
+            topic = Topic(id=id, name=topic)
         else:
-            id = self._resolve_topic(topic)
+            try:
+                # Try to resolve the topic ID from the string
+                topic = Topic(id=self.topics.resolve(topic))
+            except CacheMissError:
+                # Assume the topic string is a name, the publisher will make a best
+                # effort to resolve the ID from the name using the response from the
+                # server
+                topic = Topic(name=topic)
 
         # TODO: Support user-defined generators
         async def next():
@@ -168,7 +174,7 @@ class Ensign:
                 yield event
 
         await self.client.publish(
-            id,
+            topic,
             next(),
             on_ack=on_ack,
             on_nack=on_nack,
@@ -178,7 +184,9 @@ class Ensign:
         self, *topics, on_event=ack_event, query="", consumer_group=None
     ):
         """
-        Subscribe to events from the Ensign server.
+        Subscribe to events from the Ensign server. This method returns immediately and
+        does not wait for events to be consumed from the topics. To implement a blocking
+        subscriber, callers can use `await asyncio.Future()`.
 
         Parameters
         ----------
@@ -225,8 +233,13 @@ class Ensign:
                     "expected type 'str' for topic, got {}".format(type(topic))
                 )
 
-            # Get the ID of the topic
-            topic_ids.append(str(self._resolve_topic(topic)))
+            # Attempt to lookup or parse the ID
+            try:
+                topic_ids.append(str(self.topics.resolve(topic)))
+            except CacheMissError:
+                # Ignore unknown names for now, the server will decide if they are
+                # valid
+                topic_ids.append(topic)
 
         # Run the subscriber
         await self.client.subscribe(

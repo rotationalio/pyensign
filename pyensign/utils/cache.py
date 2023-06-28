@@ -8,8 +8,19 @@ class Cache:
     TODO: Implement max size and evictions.
     """
 
-    def __init__(self):
+    def __init__(self, read_only=False):
+        """
+        Create a new cache.
+
+        Parameters
+        ----------
+        read_only : bool (default: False)
+            If True, the cache will not be writeable. This creates a disabled cache
+            where get() will always raise a CacheMissError, exists() will always return
+            False, and add() is a no-op.
+        """
         self._index = {}
+        self._read_only = read_only
 
     def get(self, key):
         """
@@ -25,7 +36,8 @@ class Cache:
         """
         Add a value by key to the cache, overwriting the existing key.
         """
-        self._index[key] = value
+        if not self._read_only:
+            self._index[key] = value
 
     def exists(self, key):
         """
@@ -37,4 +49,5 @@ class Cache:
         """
         Reset the cache, deleting all keys.
         """
-        self._index.clear()
+        if not self._read_only:
+            self._index.clear()
