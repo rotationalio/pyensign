@@ -13,10 +13,6 @@ from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
 from pyensign.exceptions import (
     EnsignClientClosingError,
-    CacheMissError,
-    UnknownTopicError,
-    EnsignTopicNotFoundError,
-    EnsignTypeError,
 )
 
 
@@ -120,6 +116,8 @@ class Client:
                 topic,
                 on_ack=on_ack,
                 on_nack=on_nack,
+                reconnect_tick=self.reconnect_tick,
+                reconnect_timeout=self.reconnect_timeout,
             )
 
             # Connect to the publish stream
@@ -159,6 +157,8 @@ class Client:
                 on_event,
                 query=query,
                 consumer_group=consumer_group,
+                reconnect_tick=self.reconnect_tick,
+                reconnect_timeout=self.reconnect_timeout,
             )
             self.subscribers[topic_hash] = subscriber
 
