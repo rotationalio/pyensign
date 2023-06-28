@@ -5,9 +5,9 @@
 __version_info__ = {
     "major": 0,
     "minor": 7,
-    "micro": 1,
+    "micro": 2,
     "releaselevel": "beta",
-    "serial": 1,
+    "serial": 0,
 }
 
 ##########################################################################
