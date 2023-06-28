@@ -93,6 +93,8 @@ class Ensign:
         self.topics = TopicCache(read_only=disable_topic_cache)
         self.client = Client(connection, topic_cache=self.topics)
 
+        self.client = Client(connection, topic_cache=self.topics)
+
     async def publish(
         self, topic, *events, on_ack=None, on_nack=None, ensure_exists=False
     ):
@@ -445,3 +447,25 @@ class Ensign:
 
         status, version, uptime, _, _ = await self.client.status()
         return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
+
+    def _resolve_topic(self, topic):
+        """
+        Resolve a topic string into a ULID by looking it up in the cache, otherwise
+        assume it's a topic ID and try to parse it.
+        """
+
+        # Attempt to retrieve the topic ID from the cache
+        if self.topics is not None:
+            try:
+                return self.topics.get(topic)
+            except CacheMissError:
+                pass
+
+        # Otherwise attempt to parse as a ULID
+        try:
+            return ULID.from_str(topic)
+        except ValueError:
+            # TODO: Might need to return the name of the project here
+            raise UnknownTopicError(
+                f"unknown topic '{topic}', please provide the name or ID of a topic in your project"
+            )
