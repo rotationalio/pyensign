@@ -29,19 +29,19 @@ The sample code below describes some of the core PyEnsign API, but if you're loo
 
 ### Publishing
 
-Use `Ensign.publish()` to publish events to a topic. All events must contain some data and a mimetype.
+Use `Ensign.publish()` to publish events to a topic. All events must contain some data (the event payload) in binary format and a mimetype. The mimetype helps subscribers consuming the event determine how to decode the payload.
 
 ```python
 from pyensign.events import Event
 
 # Publishing a single event
-event = Event(b'{"temp": 72, "units": "fahrenheit"}', "APPLICATION_JSON")
+event = Event(b'{"temp": 72, "units": "fahrenheit"}', "application/json")
 await client.publish("weather", event)
 
 # Publishing multiple events
 events = [
-    Event(b'{"temp": 72, "units": "fahrenheit"}', "APPLICATION_JSON"),
-    Event(b'{"temp": 76, "units": "fahrenheit"}', "APPLICATION_JSON")
+    Event(b'{"temp": 72, "units": "fahrenheit"}', "application/json"),
+    Event(b'{"temp": 76, "units": "fahrenheit"}', "application/json")
 ]
 await client.publish("weather", events)
 ```
