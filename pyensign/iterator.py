@@ -38,6 +38,10 @@ class ResponseIterator:
         self.stream = stream
         pass
 
+    async def consume(self):
+        async for _ in self:
+            pass
+
     async def __aiter__(self):
         while True:
             try:

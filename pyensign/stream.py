@@ -71,10 +71,7 @@ class StreamHandler:
             await self.queue.close()
 
             # Try to reconnect to the stream
-            try:
-                await self.reconnect()
-            except EnsignTimeoutError:
-                break
+            await self.reconnect()
 
     async def reconnect(self):
         """
@@ -96,6 +93,12 @@ class StreamHandler:
                 return
             except grpc.aio.AioRpcError:
                 continue
+            except asyncio.CancelledError:
+                # Respect task cancellation from gRPC, which usually means that the
+                # underlying channel was closed by the client. At this point it won't
+                # be possible to reconnect to the stream.
+                await self.close()
+                return
 
         # Timeout expired, give up
         raise EnsignTimeoutError("timeout expired while trying to reconnect to stream")
@@ -148,8 +151,9 @@ class Publisher(StreamHandler):
         topic,
         on_ack=None,
         on_nack=None,
+        **kwargs,
     ):
-        super().__init__(client, BidiQueue())
+        super().__init__(client, BidiQueue(), **kwargs)
         self.topic = topic
         self.on_ack = on_ack
         self.on_nack = on_nack
@@ -248,8 +252,9 @@ class Subscriber(StreamHandler):
         topics,
         query="",
         consumer_group=None,
+        **kwargs,
     ):
-        super().__init__(client, BidiQueue())
+        super().__init__(client, BidiQueue(), **kwargs)
         self.topics = topics
         self.query = query
         self.consumer_group = consumer_group

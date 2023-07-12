@@ -115,6 +115,8 @@ class Client:
                 topic,
                 on_ack=on_ack,
                 on_nack=on_nack,
+                reconnect_tick=self.reconnect_tick,
+                reconnect_timeout=self.reconnect_timeout,
             )
 
             # Connect to the publish stream
@@ -153,6 +155,8 @@ class Client:
                 topics,
                 query=query,
                 consumer_group=consumer_group,
+                reconnect_tick=self.reconnect_tick,
+                reconnect_timeout=self.reconnect_timeout,
             )
             self.subscribers[topic_hash] = subscriber
 
