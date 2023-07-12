@@ -68,17 +68,15 @@ await client.publish("weather", event, on_ack=handle_ack, on_nack=handle_nack)
 
 ### Subscribing
 
-Use `Ensign.subscribe()` to subscribe to one or more topics. The `on_event` callback allows you to specify what to do when receiving an event.
+Use `Ensign.subscribe()` to subscribe to one or more topics.
 
 ```python
-async def print_event(event):
-    print("Received event: {}".format(event))
-    event.Ack()
-
-await client.subscribe("weather", "forecast", on_event=print_event)
+async for event in client.subscribe("weather", "forecast")
+    print(f"Received event with data: {event.data}")
+    event.ack()
 ```
 
-The `Event` object contains methods for acking and nacking an event back to the Ensign service. Subscribers should normally call `Event.Ack()` once the event has been successfully consumed, or `Event.Nack()` if the event needs to be redelivered.
+The `Event` object contains methods for acking and nacking an event back to the Ensign service. Subscribers should normally call `Event.ack()` once the event has been successfully consumed, or `Event.nack()` if the event needs to be redelivered.
 
 ### Design patterns
 
@@ -91,10 +89,11 @@ from pyensign.ensign import Ensign
 async def subscriber(topic):
     ...
 
-    await client.subscribe(topic, on_event=your_event_handler):
+    async for event in client.subscribe(topic):
+        # Handle the event
 
 def main():
-    asyncio.get_event_loop().run_until_complete(subscribe(topic))
+    asyncio.get_event_loop().run_until_complete(subscriber(topic))
 ```
 
 If you aren't comfortable with `asyncio` or need a more object-oriented interface, you can use the `Publisher` and `Subscriber` classes to implement your own publisher and subscriber apps.
@@ -123,20 +122,15 @@ publisher.run_forever()
 from pyensign.subscriber import Subscriber
 
 class MySubscriber(Subscriber):
-    async def handle_event(self, event):
+    async def on_event(self, event):
         # Process the event
         ...
 
         # Ack the event back to Ensign
         event.ack()
 
-    def run_forever(self):
-        self.run(on_event=self.handle_event)
-        while True:
-            pass
-
 subscriber = MySubscriber("my-topic")
-subscriber.run_forever()
+subscriber.run()
 ```
 
 

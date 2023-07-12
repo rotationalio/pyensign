@@ -64,8 +64,11 @@ class TestStreamHandler:
         stream._responses = AsyncMock(spec=ResponseIterator)
 
         # Run the stream handler which should fail to reconnect
-        with pytest.raises(EnsignTimeoutError):
-            await stream.run()
+        await stream.run()
+        close_stream = await stream.queue.read_response()
+        assert close_stream is None
+        exception = await stream.queue.read_response()
+        assert isinstance(exception, EnsignTimeoutError)
 
 
 def async_iter(items):
@@ -117,16 +120,11 @@ class TestSubscriber:
 
     @pytest.mark.asyncio
     async def test_consume(self):
-        acked_events = []
-
-        async def ack_event(event):
-            await event.ack()
-            acked_events.append(event)
+        consumed = 0
 
         subscriber = Subscriber(
             Mock(spec=["client_id", "stub", "topics"]),
             [Topic(id=ULID(), name="topic")],
-            on_event=ack_event,
         )
 
         # Write some events to the queue
@@ -135,10 +133,27 @@ class TestSubscriber:
             await subscriber.queue.write_response(
                 wrap(event.proto(), subscriber.topics[0].id)
             )
-        await subscriber.queue.close()
+        await subscriber.close()
 
         # Consume the events
-        await subscriber.consume()
+        async for event in subscriber.consume():
+            assert event.data == events[consumed].data
+            consumed += 1
 
-        # Check that the events were ACKed
-        assert len(acked_events) == len(events)
+        # All events should be consumed
+        assert consumed == len(events)
+
+    @pytest.mark.asyncio
+    async def test_consume_error(self):
+        subscriber = Subscriber(
+            Mock(spec=["client_id", "stub", "topics"]),
+            [Topic(id=ULID(), name="topic")],
+        )
+
+        # Write an error to the queue
+        await subscriber.queue.write_response(EnsignTimeoutError("reconnect timeout"))
+
+        # Should raise the error when consumed
+        with pytest.raises(EnsignTimeoutError):
+            async for _ in subscriber.consume():
+                pass

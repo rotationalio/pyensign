@@ -18,7 +18,7 @@ from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 
-from pyensign.exceptions import UnknownTopicError
+from pyensign.exceptions import UnknownTopicError, EnsignTimeoutError
 
 
 @pytest.fixture
@@ -70,6 +70,16 @@ def client(grpc_channel):
         topic_cache=Cache(),
         reconnect_tick=timedelta(milliseconds=1),
         reconnect_timeout=timedelta(milliseconds=5),
+    )
+
+
+@pytest.fixture()
+def client_no_reconnect(grpc_channel):
+    return Client(
+        MockConnection(grpc_channel),
+        topic_cache=Cache(),
+        reconnect_tick=timedelta(milliseconds=1),
+        reconnect_timeout=timedelta(milliseconds=0),
     )
 
 
@@ -341,15 +351,26 @@ class TestClient:
 
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
-        events = 0
+        event_ids = []
 
-        # Consume 3 events from the stream.
+        # Consume 2 events from the stream.
         async for event in client.subscribe(topic_ids):
             assert isinstance(event, Event)
             await event.ack()
-            events += 1
-            if events == 3:
+            event_ids.append(event.id)
+            if len(event_ids) == 2:
                 break
+
+        # Resume consuming events from the stream.
+        async for event in client.subscribe(topic_ids):
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) == 3:
+                break
+
+        # Event IDs should be unique.
+        assert len(event_ids) == len(set(event_ids))
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
@@ -359,16 +380,8 @@ class TestClient:
         topic_ids = [str(ULID()), str(ULID())]
         event_ids = []
 
-        # Consume 3 events from the stream.
-        async for event in client.subscribe(topic_ids):
-            assert isinstance(event, Event)
-            await event.ack()
-            event_ids.append(event.id)
-            if len(event_ids) == 3:
-                break
-
-        # Consume 3 more events from the stream. The mock server only sends 3 events
-        # per connection.
+        # The mock server only sends 3 events per connection, so consuming more than 3
+        # events will cause a reconnect which should be transparent to the client.
         async for event in client.subscribe(topic_ids):
             assert isinstance(event, Event)
             await event.ack()
@@ -376,14 +389,22 @@ class TestClient:
             if len(event_ids) == 6:
                 break
 
-        # The client should have reconnected at least once and the mock server sends 3
-        # events per connection.
-        await client.close()
-        assert len(event_ids) % 3 == 0
+        # Event IDs should be unique.
+        assert len(event_ids) == len(set(event_ids))
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
+
+    async def test_subscribe_timeout(self, client_no_reconnect):
+        topic_ids = [str(ULID()), str(ULID())]
+
+        # The mock server only sends 3 events per connection, so consuming more than 3
+        # events will cause a reconnect which should timeout.
+        with pytest.raises(EnsignTimeoutError):
+            async for event in client_no_reconnect.subscribe(topic_ids):
+                assert isinstance(event, Event)
+                await event.ack()
 
     async def test_pub_sub(self, client):
         topic = OTTERS_TOPIC
@@ -394,14 +415,10 @@ class TestClient:
         ]
         ack_ids = []
         event_ids = []
-        publish_acked = asyncio.Event()
-        subscribe_acked = asyncio.Event()
 
         async def record_acks(ack):
             nonlocal ack_ids
             ack_ids.append(ack.id)
-            if len(ack_ids) >= 3:
-                publish_acked.set()
 
         async def source_events():
             for event in events:
@@ -409,19 +426,14 @@ class TestClient:
 
         await client.publish(topic, source_events(), on_ack=record_acks)
 
-        async def ack_event(event):
-            nonlocal event_ids
+        # Consume all the events
+        async for event in client.subscribe(iter(["expresso", "arabica"])):
             assert isinstance(event, Event)
             await event.ack()
             event_ids.append(event.id)
-            if len(event_ids) >= 3:
-                subscribe_acked.set()
+            if len(event_ids) == 3:
+                break
 
-        await client.subscribe(iter(["expresso", "arabica"]), on_event=ack_event)
-
-        # Wait for the callback to ack all the events.
-        await publish_acked.wait()
-        await subscribe_acked.wait()
         await client.close()
         assert len(ack_ids) == len(events)
         assert len(event_ids) == len(events)

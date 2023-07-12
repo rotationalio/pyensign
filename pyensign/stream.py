@@ -71,7 +71,12 @@ class StreamHandler:
             await self.queue.close()
 
             # Try to reconnect to the stream
-            await self.reconnect()
+            try:
+                await self.reconnect()
+            except EnsignError as e:
+                # Return timeout errors etc. to the user by writing them to the queue
+                await self.queue.write_response(e)
+                return
 
     async def reconnect(self):
         """
@@ -100,7 +105,7 @@ class StreamHandler:
                 await self.close()
                 return
 
-        # Timeout expired, give up
+        # Timeout expired, give up.
         raise EnsignTimeoutError("timeout expired while trying to reconnect to stream")
 
     def _parse_topics(self, topic_map):
@@ -290,14 +295,25 @@ class Subscriber(StreamHandler):
 
     async def consume(self):
         """
-        Consume the events from the stream and yield them to the caller.
+        Consume the events from the incoming queue and yield them to the caller. This
+        coroutine is completely independent from the gRPC stream, so it will continue
+        to run even if the stream is closed. This allows the subscriber to reconnect to
+        the stream in the background without interrupting any event processing. The
+        caller must handle EnsignError exceptions.
         """
 
         while True:
             rep = await self.queue.read_response()
             if rep is None:
-                break
+                if self.shutdown.is_set():
+                    # If the subscriber is closing, stop consuming events
+                    break
+                else:
+                    # Otherwise, wait for reconnect
+                    continue
             elif isinstance(rep, EnsignError):
+                # Raise errors to the caller, this includes connection timeout errors
+                # and protocol errors
                 raise rep
             else:
                 # Convert the event into the user facing type

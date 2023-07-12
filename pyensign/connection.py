@@ -170,7 +170,7 @@ class Client:
                 done_callback=lambda: self.subscribers.pop(topic_hash, None),
             )
 
-        # Consume the events as a concurrent task
+        # Consume the events and yield them to the caller
         async for event in subscriber.consume():
             yield event
 
