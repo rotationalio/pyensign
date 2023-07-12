@@ -1,6 +1,8 @@
 import os
 import pytest
 import asyncio
+from datetime import timedelta
+
 from ulid import ULID
 from grpc import RpcError
 from pytest_httpserver import HTTPServer
@@ -63,7 +65,12 @@ def grpc_channel(grpc_create_channel):
 
 @pytest.fixture()
 def client(grpc_channel):
-    return Client(MockConnection(grpc_channel), topic_cache=Cache())
+    return Client(
+        MockConnection(grpc_channel),
+        topic_cache=Cache(),
+        reconnect_tick=timedelta(milliseconds=1),
+        reconnect_timeout=timedelta(milliseconds=5),
+    )
 
 
 @pytest.fixture
@@ -391,11 +398,14 @@ class TestClient:
         ]
         ack_ids = []
         event_ids = []
-        acked = asyncio.Event()
+        publish_acked = asyncio.Event()
+        subscribe_acked = asyncio.Event()
 
         async def record_acks(ack):
             nonlocal ack_ids
             ack_ids.append(ack.id)
+            if len(ack_ids) >= 3:
+                publish_acked.set()
 
         async def source_events():
             for event in events:
@@ -409,12 +419,13 @@ class TestClient:
             await event.ack()
             event_ids.append(event.id)
             if len(event_ids) >= 3:
-                acked.set()
+                subscribe_acked.set()
 
-        await client.subscribe(iter(["expresso", "arabica"]), ack_event)
+        await client.subscribe(iter(["expresso", "arabica"]), on_event=ack_event)
 
         # Wait for the callback to ack all the events.
-        await acked.wait()
+        await publish_acked.wait()
+        await subscribe_acked.wait()
         await client.close()
         assert len(ack_ids) == len(events)
         assert len(event_ids) == len(events)
