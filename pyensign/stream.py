@@ -246,12 +246,10 @@ class Subscriber(StreamHandler):
         self,
         client,
         topics,
-        on_event,
         query="",
         consumer_group=None,
     ):
         super().__init__(client, BidiQueue())
-        self.on_event = on_event
         self.topics = topics
         self.query = query
         self.consumer_group = consumer_group
@@ -287,7 +285,7 @@ class Subscriber(StreamHandler):
 
     async def consume(self):
         """
-        Consume the events from the stream and execute user-defined callbacks.
+        Consume the events from the stream and yield them to the caller.
         """
 
         while True:
@@ -300,4 +298,4 @@ class Subscriber(StreamHandler):
                 # Convert the event into the user facing type
                 event = from_proto(unwrap(rep))
                 event.mark_subscribed(rep.id, self.queue)
-                await self.on_event(event)
+                yield event

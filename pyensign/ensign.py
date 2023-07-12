@@ -2,7 +2,6 @@ import os
 import json
 from ulid import ULID
 
-from pyensign.events import ack_event
 from pyensign.connection import Client
 from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
@@ -99,14 +98,18 @@ class Ensign:
         self, topic, *events, on_ack=None, on_nack=None, ensure_exists=False
     ):
         """
-        Publish events to an Ensign topic.
+        Publish events to an Ensign topic. This function is asynchronous; it publishes
+        events to an outgoing queue and returns immediately. Publishers can configure
+        the `on_ack` and `on_nack` callbacks to implement per-event success or failure
+        handling. Alternatively, publishers can check the status of events at any time
+        using the `acked()` and `nacked()` methods on the events themselves.
 
         Parameters
         ----------
         topic: str
             The name or ID of the topic to publish events to.
 
-        events : iterable of events
+        events : iterable of events.Event objects
             The events to publish.
 
         on_ack: coroutine (optional)
@@ -180,26 +183,16 @@ class Ensign:
             on_nack=on_nack,
         )
 
-    async def subscribe(
-        self, *topics, on_event=ack_event, query="", consumer_group=None
-    ):
+    async def subscribe(self, *topics, query="", consumer_group=None):
         """
-        Subscribe to events from the Ensign server. This method returns immediately and
-        does not wait for events to be consumed from the topics. To implement a blocking
-        subscriber, callers can use `await asyncio.Future()`.
+        Subscribe to events from the Ensign server. This method returns an async
+        generator that yields Event objects, so the `async for` syntax can be used to
+        process events as they are received.
 
         Parameters
         ----------
         topics : iterable of str
             The topic names or IDs to subscribe to.
-
-        on_event: coroutine (optional)
-            A coroutine to process each event received from Ensign. The first argument
-            of the coroutine is an event.Event object. Subscribers should call either
-            ack() or nack() on the event to signal to the server if the event was
-            successfully processed or it needs to be redelivered to another subscriber
-            in the consumer group. If this argument is not provided, events are
-            automatically acked.
 
         query : str (optional)
             EnSQL query to filter events.
@@ -214,6 +207,13 @@ class Ensign:
 
         UnknownTopicError
             If a topic is provided that does not exist.
+
+        Yields
+        ------
+        events.Event
+            The event objects. Subscribers should call ack() or nack() on each event
+            object to signal to the server if the event was successfully processed or
+            it needs to be redelivered to another subscriber in the consumer group.
         """
 
         # Handle a list of topics passed as a single argument
@@ -241,13 +241,13 @@ class Ensign:
                 # valid
                 topic_ids.append(topic)
 
-        # Run the subscriber
-        await self.client.subscribe(
+        # Yield events from the subscribe stream
+        async for event in self.client.subscribe(
             topic_ids,
-            on_event,
             query=query,
             consumer_group=consumer_group,
-        )
+        ):
+            yield event
 
     async def get_topics(self):
         """

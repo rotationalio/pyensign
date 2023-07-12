@@ -334,24 +334,15 @@ class TestClient:
 
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
-        event_ids = []
-        acked = asyncio.Event()
+        events = 0
 
-        async def ack_event(event):
-            nonlocal event_ids
+        # Consume 3 events from the stream.
+        async for event in client.subscribe(topic_ids):
             assert isinstance(event, Event)
             await event.ack()
-            event_ids.append(event.id)
-            if len(event_ids) >= 3:
-                acked.set()
-
-        # Subscribe using an event callback.
-        await client.subscribe(topic_ids, ack_event)
-
-        # Wait for the callback to ack all the events.
-        await acked.wait()
-        await client.close()
-        assert len(event_ids) == 3
+            events += 1
+            if events == 3:
+                break
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
@@ -360,18 +351,23 @@ class TestClient:
     async def test_subscribe_reconnect(self, client):
         topic_ids = [str(ULID()), str(ULID())]
         event_ids = []
-        acked = asyncio.Event()
 
-        async def ack_event(event):
-            nonlocal event_ids
+        # Consume 3 events from the stream.
+        async for event in client.subscribe(topic_ids):
             assert isinstance(event, Event)
             await event.ack()
             event_ids.append(event.id)
-            if len(event_ids) >= 6:
-                acked.set()
+            if len(event_ids) == 3:
+                break
 
-        # Subscribe using an event callback.
-        await client.subscribe(topic_ids, ack_event)
+        # Consume 3 more events from the stream. The mock server only sends 3 events
+        # per connection.
+        async for event in client.subscribe(topic_ids):
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) == 6:
+                break
 
         # The client should have reconnected at least once and the mock server sends 3
         # events per connection.

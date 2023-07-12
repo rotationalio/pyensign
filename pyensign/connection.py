@@ -4,7 +4,6 @@ from ulid import ULID
 from grpc import aio
 from datetime import timedelta
 
-from pyensign.utils.topics import Topic
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.tasks import WorkerPool
@@ -13,10 +12,6 @@ from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
 from pyensign.exceptions import (
     EnsignClientClosingError,
-    CacheMissError,
-    UnknownTopicError,
-    EnsignTopicNotFoundError,
-    EnsignTypeError,
 )
 
 
@@ -141,7 +136,7 @@ class Client:
         await self.pool.schedule(publisher.queue_events(events))
 
     @catch_rpc_error
-    async def subscribe(self, topics, on_event, query="", consumer_group=None):
+    async def subscribe(self, topics, query="", consumer_group=None):
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
 
@@ -156,7 +151,6 @@ class Client:
             subscriber = Subscriber(
                 self,
                 topics,
-                on_event,
                 query=query,
                 consumer_group=consumer_group,
             )
@@ -173,7 +167,8 @@ class Client:
             )
 
         # Consume the events as a concurrent task
-        await self.pool.schedule(subscriber.consume())
+        async for event in subscriber.consume():
+            yield event
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):
