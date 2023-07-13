@@ -265,7 +265,8 @@ class TestEnsign:
     async def test_subscribe(self, mock_subscribe, topics, ensign):
         ensign.topics.add("otters", ULID())
         ensign.topics.add("lighthouses", ULID())
-        await ensign.subscribe(topics)
+        async for event in ensign.subscribe(topics):
+            assert isinstance(event, Event)
 
         # Ensure that ULID strings are passed to the subscribe call
         args, _ = mock_subscribe.call_args
@@ -290,12 +291,14 @@ class TestEnsign:
         mock_exists.return_value = (None, False)
         mock_list.return_value = ([topic_pb2.Topic(name="otters", id=ULID().bytes)], "")
         with pytest.raises(exception):
-            await ensign.subscribe(topics)
+            async for _ in ensign.subscribe(topics):
+                pass
 
     @pytest.mark.asyncio
     async def test_subscribe_no_topics(self, ensign):
         with pytest.raises(ValueError):
-            await ensign.subscribe()
+            async for _ in ensign.subscribe():
+                pass
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
@@ -488,29 +491,20 @@ class TestEnsign:
             await ensign.publish(topic, event, on_ack=handle_ack)
             await publish_ack.wait()
 
-        received = None
-        subscribe_ack = asyncio.Event()
-
-        async def ack_event(e):
-            nonlocal received
-            await e.ack()
-            subscribe_ack.set()
-            received = e
-
         async def sub():
-            await ensign.subscribe(topic, on_event=ack_event)
-            await subscribe_ack.wait()
-            return received
+            async for event in ensign.subscribe(topic):
+                await event.ack()
+                return event
 
-        _, recevied = await asyncio.gather(pub(), sub())
+        _, received = await asyncio.gather(pub(), sub())
         assert event.acked()
         assert not event.nacked()
         assert received.acked()
         assert not received.nacked()
-        assert recevied.data == b"message in a bottle"
-        assert recevied.mimetype == MIME.TEXT_PLAIN
-        assert recevied.type.name == "Generic"
-        assert recevied.type.major_version == 1
-        assert recevied.type.minor_version == 0
-        assert recevied.type.patch_version == 0
-        assert recevied.id
+        assert received.data == b"message in a bottle"
+        assert received.mimetype == MIME.TEXT_PLAIN
+        assert received.type.name == "Generic"
+        assert received.type.major_version == 1
+        assert received.type.minor_version == 0
+        assert received.type.patch_version == 0
+        assert received.id
