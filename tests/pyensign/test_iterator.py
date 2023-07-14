@@ -186,7 +186,6 @@ class TestSubscribeResponseIterator:
         await responses.consume()
         for event in events:
             assert await queue.read_response() == event
-        assert await queue.read_response() is None
 
     @pytest.mark.asyncio
     async def test_consume_bad_type(self):
@@ -202,4 +201,3 @@ class TestSubscribeResponseIterator:
         responses = SubscribeResponseIterator(stream, queue)
         await responses.consume()
         assert isinstance(await queue.read_response(), EnsignTypeError)
-        assert await queue.read_response() is None

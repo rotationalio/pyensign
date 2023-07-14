@@ -128,4 +128,3 @@ class SubscribeResponseIterator(ResponseIterator):
                     EnsignTypeError(f"unexpected response type: {rep_type}")
                 )
                 break
-        await self.queue.close()
