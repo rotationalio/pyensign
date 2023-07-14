@@ -2,7 +2,7 @@ import asyncio
 
 import grpc
 import pytest
-from unittest.mock import AsyncMock
+from asyncmock import AsyncMock
 
 from pyensign.events import Event
 from pyensign.utils.queue import BidiQueue
