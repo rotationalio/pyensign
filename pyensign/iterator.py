@@ -124,8 +124,7 @@ class SubscribeResponseIterator(ResponseIterator):
             elif rep_type == "close_stream":
                 break
             else:
-                self.queue.write_response(
+                await self.queue.write_response(
                     EnsignTypeError(f"unexpected response type: {rep_type}")
                 )
                 break
-        await self.queue.close()
