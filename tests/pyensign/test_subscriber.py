@@ -4,8 +4,18 @@ from unittest import mock
 import pytest
 from asyncmock import patch
 
+from pyensign.events import Event
+from pyensign.utils.queue import BidiQueue
 from pyensign.subscriber import Subscriber
 from pyensign.exceptions import UnknownTopicError
+
+
+def async_iter(items):
+    async def next():
+        for item in items:
+            yield item
+
+    return next()
 
 
 class TestSubscriber:
@@ -28,13 +38,17 @@ class TestSubscriber:
 
     @patch("pyensign.ensign.Ensign.subscribe")
     def test_run(self, mock_subscribe):
-        mock_subscribe.return_value = None
+        # Create a fake event for the subscriber to receive.
+        events = [Event(data=b"event1", mimetype="text/plain")]
+        events[0].mark_subscribed(None, BidiQueue())
+        mock_subscribe.return_value = async_iter(events)
 
         subscriber = Subscriber(
             "topic", client_id="client_id", client_secret="client_secret"
         )
-        assert subscriber.run() is None
+        subscriber.run()
         mock_subscribe.assert_called_once_with(("topic",))
+        assert events[0].acked()
 
     @patch("pyensign.ensign.Ensign.subscribe")
     def test_run_exception(self, mock_subscribe):
@@ -52,14 +66,14 @@ class TestSubscriber:
         Should be able to use the Subscriber as a base class.
         """
 
-        mock_subscribe.return_value = None
+        # Create a fake event for the subscriber to receive.
+        events = [Event(data=b"event1", mimetype="text/plain")]
+        events[0].mark_subscribed(None, BidiQueue())
+        mock_subscribe.return_value = async_iter(events)
 
         class MySubscriber(Subscriber):
             async def on_event(self, event):
-                event.ack()
-
-            def consume(self):
-                self.run(on_event=self.on_event)
+                await event.nack(100)
 
         subscriber = MySubscriber(
             "otters",
@@ -67,7 +81,6 @@ class TestSubscriber:
             client_id="client_id",
             client_secret="client_secret",
         )
-        assert subscriber.consume() is None
-        mock_subscribe.assert_called_once_with(
-            ("otters", "lighthouses"), on_event=subscriber.on_event
-        )
+        subscriber.run()
+        mock_subscribe.assert_called_once_with(("otters", "lighthouses"))
+        assert events[0].nacked()
