@@ -358,11 +358,12 @@ class TestClient:
         """
         Test executing publish from synchronous code as a coroutine.
         """
-        published = asyncio.Event()
+        published = False
 
         async def handle_ack(ack):
             assert isinstance(ack, ensign_pb2.Ack)
-            published.set()
+            nonlocal published
+            published = True
 
         async def publish():
             await client.publish(
@@ -370,7 +371,8 @@ class TestClient:
                 async_iter([Event(data=b"event", mimetype="text/plain")]),
                 on_ack=handle_ack,
             )
-            await published.wait()
+            while not published:
+                await asyncio.sleep(0.1)
             await client.close()
 
         asyncio.run(publish())

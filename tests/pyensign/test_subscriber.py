@@ -66,9 +66,13 @@ class TestSubscriber:
         Should be able to use the Subscriber as a base class.
         """
 
+        class MockQueue:
+            async def write_request(self, request):
+                pass
+
         # Create a fake event for the subscriber to receive.
         events = [Event(data=b"event1", mimetype="text/plain")]
-        events[0].mark_subscribed(None, BidiQueue())
+        events[0].mark_subscribed(None, MockQueue())
         mock_subscribe.return_value = async_iter(events)
 
         class MySubscriber(Subscriber):

@@ -94,11 +94,11 @@ class Client:
         self.channel = None
         self.publishers = {}
         self.subscribers = {}
-        self.pool = WorkerPool(max_workers=10, max_queue_size=100)
+        self.pool = None
         self.topics = topic_cache
         self.reconnect_tick = reconnect_tick
         self.reconnect_timeout = reconnect_timeout
-        self.shutdown = asyncio.Event()
+        self.shutdown = None
 
         # Create client ID if not provided, which exists for the lifetime of the client
         # and persists across reconnects
@@ -107,24 +107,34 @@ class Client:
         else:
             self.client_id = client_id
 
-    def _ensure_connected(self):
+    def _ensure_ready(self):
         """
         Create the gRPC channel and stub if not already connected. This is done at call
-        time rather than when the client is created to ensure the user code runs in the
-        same event loop as the gRPC library.
+        time rather than when the client is created to ensure that user code runs in
+        the same event loop as the gRPC library. This function also creates the worker
+        pool and shutdown event signal if not already created.
+        TODO: We could avoid this by requiring the Ensign client to be created in the
+        event loop, e.g. async with Client(...) as client: ..., but the current syntax
+        is a bit easier.
         """
 
         if not self.channel:
             self.channel = self.connection.create_channel()
             self.stub = ensign_pb2_grpc.EnsignStub(self.channel)
 
+        if not self.pool:
+            self.pool = WorkerPool(max_workers=10, max_queue_size=100)
+
+        if not self.shutdown:
+            self.shutdown = asyncio.Event()
+
     @catch_rpc_error
     async def publish(self, topic, events, on_ack=None, on_nack=None):
+        # Ensure we have a gRPC channel
+        self._ensure_ready()
+
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
-
-        # Ensure we have a gRPC channel
-        self._ensure_connected()
 
         # Attempt to hash the topic, which fails if there is no topic ID
         try:
@@ -166,11 +176,11 @@ class Client:
 
     @catch_rpc_error
     async def subscribe(self, topics, query="", consumer_group=None):
+        # Ensure we have a gRPC channel
+        self._ensure_ready()
+
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
-
-        # Ensure we have a gRPC channel
-        self._ensure_connected()
 
         # Create a hash of the topics
         topic_hash = frozenset([t for t in topics])
@@ -206,7 +216,7 @@ class Client:
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):
-        self._ensure_connected()
+        self._ensure_ready()
         params = ensign_pb2.PageInfo(
             page_size=page_size, next_page_token=next_page_token
         )
@@ -215,18 +225,18 @@ class Client:
 
     @catch_rpc_error
     async def create_topic(self, topic):
-        self._ensure_connected()
+        self._ensure_ready()
         return await self.stub.CreateTopic(topic)
 
     @catch_rpc_error
     async def retrieve_topic(self, id):
-        self._ensure_connected()
+        self._ensure_ready()
         topic = topic_pb2.Topic(id=id)
         return await self.stub.RetrieveTopic(topic)
 
     @catch_rpc_error
     async def archive_topic(self, id):
-        self._ensure_connected()
+        self._ensure_ready()
         params = topic_pb2.TopicMod(
             id=id, operation=topic_pb2.TopicMod.Operation.ARCHIVE
         )
@@ -235,7 +245,7 @@ class Client:
 
     @catch_rpc_error
     async def destroy_topic(self, id):
-        self._ensure_connected()
+        self._ensure_ready()
         params = topic_pb2.TopicMod(
             id=id, operation=topic_pb2.TopicMod.Operation.DESTROY
         )
@@ -244,7 +254,7 @@ class Client:
 
     @catch_rpc_error
     async def topic_names(self, page_size=100, next_page_token=""):
-        self._ensure_connected()
+        self._ensure_ready()
         params = ensign_pb2.PageInfo(
             page_size=page_size, next_page_token=next_page_token
         )
@@ -253,7 +263,7 @@ class Client:
 
     @catch_rpc_error
     async def topic_exists(self, topic_id=None, project_id=None, topic_name=""):
-        self._ensure_connected()
+        self._ensure_ready()
         params = topic_pb2.TopicName(
             topic_id=topic_id, project_id=project_id, name=topic_name
         )
@@ -262,12 +272,12 @@ class Client:
 
     @catch_rpc_error
     async def info(self, topics=[]):
-        self._ensure_connected()
+        self._ensure_ready()
         return await self.stub.Info(ensign_pb2.InfoRequest(topics=topics))
 
     @catch_rpc_error
     async def status(self, attempts=0, last_checked_at=None):
-        self._ensure_connected()
+        self._ensure_ready()
         params = ensign_pb2.HealthCheck(
             attempts=attempts, last_checked_at=last_checked_at
         )
