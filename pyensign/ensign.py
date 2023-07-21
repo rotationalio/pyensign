@@ -1,5 +1,6 @@
 import os
 import json
+
 from ulid import ULID
 
 from pyensign.connection import Client
@@ -90,8 +91,6 @@ class Ensign:
         connection = Connection(addrport=endpoint, insecure=insecure, auth=auth)
 
         self.topics = TopicCache(read_only=disable_topic_cache)
-        self.client = Client(connection, topic_cache=self.topics)
-
         self.client = Client(connection, topic_cache=self.topics)
 
     async def publish(

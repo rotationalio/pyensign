@@ -4,7 +4,7 @@ import asyncio
 from datetime import timedelta
 
 from ulid import ULID
-from grpc import RpcError
+from grpc import RpcError, aio
 from pytest_httpserver import HTTPServer
 
 from pyensign.events import Event
@@ -49,24 +49,16 @@ def grpc_servicer():
 
 
 @pytest.fixture()
-def grpc_create_channel(request, grpc_addr, grpc_server):
-    def _create_channel():
-        from grpc.experimental import aio
-
-        return aio.insecure_channel(grpc_addr)
-
-    return _create_channel
-
-
-@pytest.fixture()
-def grpc_channel(grpc_create_channel):
-    return grpc_create_channel()
-
-
-@pytest.fixture()
-def client(grpc_channel):
+def client(grpc_addr, grpc_server):
+    """
+    This defines a client fixture that connects to the mock gRPC service which is
+    listening on grpc_addr.
+    TODO: We currently have to include grpc_server here to force pytest to load the
+    server fixture which is defined in the pytest-grpc library and start the server,
+    need to figure out a better way of handling that.
+    """
     return Client(
-        MockConnection(grpc_channel),
+        MockConnection(grpc_addr),
         topic_cache=Cache(),
         reconnect_tick=timedelta(milliseconds=1),
         reconnect_timeout=timedelta(milliseconds=5),
@@ -74,9 +66,9 @@ def client(grpc_channel):
 
 
 @pytest.fixture()
-def client_no_reconnect(grpc_channel):
+def client_no_reconnect(grpc_addr, grpc_server):
     return Client(
-        MockConnection(grpc_channel),
+        MockConnection(grpc_addr),
         topic_cache=Cache(),
         reconnect_tick=timedelta(milliseconds=1),
         reconnect_timeout=timedelta(milliseconds=0),
@@ -105,6 +97,14 @@ def rpc_error_coro():
     return coro
 
 
+def async_iter(items):
+    async def next():
+        for item in items:
+            yield item
+
+    return next()
+
+
 class TestConnection:
     """
     Test establishing a connection to an Ensign server.
@@ -112,15 +112,15 @@ class TestConnection:
 
     def test_connect(self):
         conn = Connection("localhost:5356")
-        assert conn.channel is not None
+        assert conn.create_channel() is not None
 
     def test_connect_insecure(self):
         conn = Connection("localhost:5356", insecure=True)
-        assert conn.channel is not None
+        assert conn.create_channel() is not None
 
     def test_connect_secure(self, auth):
         conn = Connection("localhost:5356", auth=auth)
-        assert conn.channel is not None
+        assert conn.create_channel() is not None
 
     @pytest.mark.parametrize(
         "addrport",
@@ -143,9 +143,12 @@ class TestConnection:
 
 
 class MockConnection(Connection):
-    def __init__(self, channel):
-        self.channel = channel
+    def __init__(self, addr):
+        self.addr = addr
         pass
+
+    def create_channel(self):
+        return aio.insecure_channel(self.addr)
 
 
 OTTERS_TOPIC = Topic(id=ULID(), name="otters")
@@ -257,12 +260,12 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         )
 
 
-@pytest.mark.asyncio
 class TestClient:
     """
     Test that the client uses the stub correctly.
     """
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "topic",
         [
@@ -309,6 +312,7 @@ class TestClient:
         id = client.topics.get(OTTERS_TOPIC.name)
         assert id == OTTERS_TOPIC.id
 
+    @pytest.mark.asyncio
     async def test_publish_reconnect(self, client):
         ack_ids = []
         published = asyncio.Event()
@@ -338,6 +342,7 @@ class TestClient:
         id = client.topics.get(OTTERS_TOPIC.name)
         assert id == OTTERS_TOPIC.id
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "topic",
         [
@@ -349,6 +354,30 @@ class TestClient:
         with pytest.raises(UnknownTopicError):
             await client.publish(topic, [])
 
+    def test_publish_sync(self, client):
+        """
+        Test executing publish from synchronous code as a coroutine.
+        """
+        published = False
+
+        async def handle_ack(ack):
+            assert isinstance(ack, ensign_pb2.Ack)
+            nonlocal published
+            published = True
+
+        async def publish():
+            await client.publish(
+                OTTERS_TOPIC,
+                async_iter([Event(data=b"event", mimetype="text/plain")]),
+                on_ack=handle_ack,
+            )
+            while not published:
+                await asyncio.sleep(0.1)
+            await client.close()
+
+        asyncio.run(publish())
+
+    @pytest.mark.asyncio
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
         event_ids = []
@@ -376,6 +405,7 @@ class TestClient:
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
 
+    @pytest.mark.asyncio
     async def test_subscribe_reconnect(self, client):
         topic_ids = [str(ULID()), str(ULID())]
         event_ids = []
@@ -396,6 +426,7 @@ class TestClient:
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
 
+    @pytest.mark.asyncio
     async def test_subscribe_timeout(self, client_no_reconnect):
         topic_ids = [str(ULID()), str(ULID())]
 
@@ -406,6 +437,21 @@ class TestClient:
                 assert isinstance(event, Event)
                 await event.ack()
 
+    def test_subscribe_sync(self, client):
+        """
+        Test executing subscribe from synchronous code as a coroutine.
+        """
+
+        async def consume():
+            async for event in client.subscribe([str(ULID())]):
+                assert isinstance(event, Event)
+                await event.ack()
+                break
+            await client.close()
+
+        asyncio.run(consume())
+
+    @pytest.mark.asyncio
     async def test_pub_sub(self, client):
         topic = OTTERS_TOPIC
         events = [
@@ -440,41 +486,49 @@ class TestClient:
         for event in events:
             assert event.acked()
 
+    @pytest.mark.asyncio
     async def test_list_topics(self, client):
         topics, next_page_token = await client.list_topics()
         assert len(topics) == 2
         assert next_page_token == "next"
 
+    @pytest.mark.asyncio
     async def test_create_topic(self, client):
         id = ULID().bytes
         topic = await client.create_topic(topic_pb2.Topic(id=id))
         assert topic.id == id
 
+    @pytest.mark.asyncio
     async def test_retrieve_topic(self, client):
         id = ULID().bytes
         topic = await client.retrieve_topic(id)
         assert topic.id == id
 
+    @pytest.mark.asyncio
     async def test_archive_topic(self, client):
         id, state = await client.archive_topic("1")
         assert id == "1"
         assert isinstance(state, int)
 
+    @pytest.mark.asyncio
     async def test_destroy_topic(self, client):
         id, state = await client.destroy_topic("1")
         assert id == "1"
         assert isinstance(state, int)
 
+    @pytest.mark.asyncio
     async def test_topic_names(self, client):
         names, next_page_token = await client.topic_names()
         assert len(names) == 2
         assert next_page_token == "next"
 
+    @pytest.mark.asyncio
     async def test_topic_exists(self, client):
         query, exists = await client.topic_exists("topic_id", "project_id", "expresso")
         assert query == "query"
         assert exists is True
 
+    @pytest.mark.asyncio
     async def test_info(self, client):
         topic_ids = [ULID().bytes, ULID().bytes]
         info = await client.info(topics=topic_ids)
@@ -483,6 +537,7 @@ class TestClient:
         assert info.readonly_topics > 0
         assert info.events > 0
 
+    @pytest.mark.asyncio
     async def test_status(self, client):
         status, version, uptime, not_before, not_after = await client.status()
         assert status is not None
@@ -491,6 +546,7 @@ class TestClient:
         assert not_before is not None
         assert not_after is not None
 
+    @pytest.mark.asyncio
     async def test_insecure(self, live, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
@@ -505,6 +561,7 @@ class TestClient:
         assert not_before is not None
         assert not_after is not None
 
+    @pytest.mark.asyncio
     async def test_status_live(self, live, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
@@ -519,6 +576,7 @@ class TestClient:
         assert not_before is not None
         assert not_after is not None
 
+    @pytest.mark.asyncio
     async def test_auth_endpoint(self, live, ensignserver, authserver, creds):
         if not live:
             pytest.skip("Skipping live test")

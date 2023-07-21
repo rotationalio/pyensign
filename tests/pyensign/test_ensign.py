@@ -241,6 +241,23 @@ class TestEnsign:
         with pytest.raises(ValueError):
             await ensign.publish("otters")
 
+    @patch("pyensign.connection.Client.publish")
+    def test_publish_sync(self, mock_publish, ensign):
+        """
+        Test executing publish from synchronous code as a coroutine.
+        """
+
+        async def publish():
+            await ensign.publish("otters", [Event(b"foo", "text/plain")])
+
+        asyncio.run(publish())
+
+        # Ensure that the publish call was made with the correct topic ID
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], Topic)
+        assert args[0].name == "otters"
+        assert args[0].id is None
+
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.status")
     async def test_status(self, mock_status, ensign):
@@ -299,6 +316,24 @@ class TestEnsign:
         with pytest.raises(ValueError):
             async for _ in ensign.subscribe():
                 pass
+
+    @patch("pyensign.connection.Client.subscribe")
+    def test_subscribe_sync(self, mock_subscribe, ensign):
+        """
+        Test executing subscribe from synchronous code as a coroutine.
+        """
+        ensign.topics.add("otters", ULID())
+
+        async def subscribe():
+            async for event in ensign.subscribe("otters"):
+                assert isinstance(event, Event)
+
+        asyncio.run(subscribe())
+
+        # Ensure that ULID strings are passed to the subscribe call
+        args, _ = mock_subscribe.call_args
+        for id in args[0]:
+            assert isinstance(ULID.from_str(id), ULID)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")

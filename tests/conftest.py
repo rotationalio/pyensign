@@ -16,10 +16,3 @@ def pytest_addoption(parser):
         default="",
         help="path to credentials file for live tests",
     )
-
-
-@pytest.fixture()
-def event_loop():
-    loop = asyncio.get_event_loop()
-    yield loop
-    loop.close()

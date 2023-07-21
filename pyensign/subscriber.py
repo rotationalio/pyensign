@@ -57,9 +57,7 @@ class Subscriber(Ensign):
             consumer group IDs.
         """
 
-        exception = asyncio.get_event_loop().run_until_complete(
-            self.consume(), **kwargs
-        )
+        exception = asyncio.run(self.consume(), **kwargs)
         if exception:
             raise exception
 

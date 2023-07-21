@@ -1,15 +1,17 @@
 import grpc
 import asyncio
+import inspect
 from ulid import ULID
 from grpc import aio
+from functools import wraps
 from datetime import timedelta
 
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.tasks import WorkerPool
-from pyensign.stream import Publisher, Subscriber
-from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.exceptions import catch_rpc_error
+from pyensign.api.v1beta1 import ensign_pb2_grpc
+from pyensign.stream import Publisher, Subscriber
 from pyensign.exceptions import (
     EnsignClientClosingError,
 )
@@ -38,21 +40,31 @@ class Connection:
         addrParts = addrport.split(":", 2)
         if len(addrParts) != 2 or not addrParts[0] or not addrParts[1]:
             raise ValueError("Invalid address:port format")
+        self.addrport = addrport
 
-        if insecure:
-            if auth is not None:
-                raise ValueError("Cannot use auth with insecure=True")
-            self.channel = aio.insecure_channel(addrport)
+        if insecure and auth:
+            raise ValueError("Cannot use auth with insecure=True")
+        self.insecure = insecure
+        self.auth = auth
+
+    def create_channel(self):
+        """
+        Create a new gRPC channel from the connection parameters. The caller is
+        responsible for closing the channel.
+        """
+
+        if self.insecure:
+            return aio.insecure_channel(self.addrport)
         else:
             credentials = grpc.ssl_channel_credentials()
-            if auth is not None:
+            if self.auth is not None:
                 call_credentials = grpc.metadata_call_credentials(
-                    auth, name="auth gateway"
+                    self.auth, name="auth gateway"
                 )
                 credentials = grpc.composite_channel_credentials(
                     credentials, call_credentials
                 )
-            self.channel = aio.secure_channel(addrport, credentials)
+            return aio.secure_channel(self.addrport, credentials)
 
 
 class Client:
@@ -69,7 +81,8 @@ class Client:
         reconnect_timeout=timedelta(minutes=5),
     ):
         """
-        Create a new client from an established connection.
+        Create a new client for making requests to Ensign. The connection is not
+        established until the connect() method is called.
 
         Parameters
         ----------
@@ -77,15 +90,15 @@ class Client:
             The connection to the Ensign server
         """
 
-        self.channel = connection.channel
-        self.stub = ensign_pb2_grpc.EnsignStub(self.channel)
+        self.connection = connection
+        self.channel = None
         self.publishers = {}
         self.subscribers = {}
-        self.pool = WorkerPool(max_workers=10, max_queue_size=100)
+        self.pool = None
         self.topics = topic_cache
         self.reconnect_tick = reconnect_tick
         self.reconnect_timeout = reconnect_timeout
-        self.shutdown = asyncio.Event()
+        self.shutdown = None
 
         # Create client ID if not provided, which exists for the lifetime of the client
         # and persists across reconnects
@@ -94,8 +107,32 @@ class Client:
         else:
             self.client_id = client_id
 
+    def _ensure_ready(self):
+        """
+        Create the gRPC channel and stub if not already connected. This is done at call
+        time rather than when the client is created to ensure that user code runs in
+        the same event loop as the gRPC library. This function also creates the worker
+        pool and shutdown event signal if not already created.
+        TODO: We could avoid this by requiring the Ensign client to be created in the
+        event loop, e.g. async with Client(...) as client: ..., but the current syntax
+        is a bit easier.
+        """
+
+        if not self.channel:
+            self.channel = self.connection.create_channel()
+            self.stub = ensign_pb2_grpc.EnsignStub(self.channel)
+
+        if not self.pool:
+            self.pool = WorkerPool(max_workers=10, max_queue_size=100)
+
+        if not self.shutdown:
+            self.shutdown = asyncio.Event()
+
     @catch_rpc_error
     async def publish(self, topic, events, on_ack=None, on_nack=None):
+        # Ensure we have a gRPC channel
+        self._ensure_ready()
+
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
 
@@ -139,6 +176,9 @@ class Client:
 
     @catch_rpc_error
     async def subscribe(self, topics, query="", consumer_group=None):
+        # Ensure we have a gRPC channel
+        self._ensure_ready()
+
         if self.shutdown.is_set():
             raise EnsignClientClosingError("client is closing")
 
@@ -176,6 +216,7 @@ class Client:
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):
+        self._ensure_ready()
         params = ensign_pb2.PageInfo(
             page_size=page_size, next_page_token=next_page_token
         )
@@ -184,15 +225,18 @@ class Client:
 
     @catch_rpc_error
     async def create_topic(self, topic):
+        self._ensure_ready()
         return await self.stub.CreateTopic(topic)
 
     @catch_rpc_error
     async def retrieve_topic(self, id):
+        self._ensure_ready()
         topic = topic_pb2.Topic(id=id)
         return await self.stub.RetrieveTopic(topic)
 
     @catch_rpc_error
     async def archive_topic(self, id):
+        self._ensure_ready()
         params = topic_pb2.TopicMod(
             id=id, operation=topic_pb2.TopicMod.Operation.ARCHIVE
         )
@@ -201,6 +245,7 @@ class Client:
 
     @catch_rpc_error
     async def destroy_topic(self, id):
+        self._ensure_ready()
         params = topic_pb2.TopicMod(
             id=id, operation=topic_pb2.TopicMod.Operation.DESTROY
         )
@@ -209,6 +254,7 @@ class Client:
 
     @catch_rpc_error
     async def topic_names(self, page_size=100, next_page_token=""):
+        self._ensure_ready()
         params = ensign_pb2.PageInfo(
             page_size=page_size, next_page_token=next_page_token
         )
@@ -217,6 +263,7 @@ class Client:
 
     @catch_rpc_error
     async def topic_exists(self, topic_id=None, project_id=None, topic_name=""):
+        self._ensure_ready()
         params = topic_pb2.TopicName(
             topic_id=topic_id, project_id=project_id, name=topic_name
         )
@@ -225,10 +272,12 @@ class Client:
 
     @catch_rpc_error
     async def info(self, topics=[]):
+        self._ensure_ready()
         return await self.stub.Info(ensign_pb2.InfoRequest(topics=topics))
 
     @catch_rpc_error
     async def status(self, attempts=0, last_checked_at=None):
+        self._ensure_ready()
         params = ensign_pb2.HealthCheck(
             attempts=attempts, last_checked_at=last_checked_at
         )
@@ -241,6 +290,7 @@ class Client:
         """
         await self.channel.close()
         await self._close_streams()
+        self.channel = None
 
     async def _close_streams(self):
         # Prevent new streams from being created

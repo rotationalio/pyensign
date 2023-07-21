@@ -50,9 +50,7 @@ class Publisher(Ensign):
             Additional keyword arguments to pass to the publish() method.
         """
 
-        exception = asyncio.get_event_loop().run_until_complete(
-            self.publish_from(event_iterator, **kwargs)
-        )
+        exception = asyncio.run(self.publish_from(event_iterator, **kwargs))
         if exception:
             raise exception
 

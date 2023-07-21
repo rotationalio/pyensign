@@ -93,7 +93,7 @@ async def subscriber(topic):
         # Handle the event
 
 def main():
-    asyncio.get_event_loop().run_until_complete(subscriber(topic))
+    asyncio.run(subscriber(topic))
 ```
 
 If you aren't comfortable with `asyncio` or need a more object-oriented interface, you can use the `Publisher` and `Subscriber` classes to implement your own publisher and subscriber apps.
