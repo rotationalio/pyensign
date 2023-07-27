@@ -1,9 +1,11 @@
 import pytest
 
-from pyensign.events import Event
+from pyensign import nack
 from pyensign import mimetypes as mt
+from pyensign.utils.queue import BidiQueue
+from pyensign.events import Event, EventState
+from pyensign.api.v1beta1 import event_pb2, ensign_pb2
 from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
-from pyensign.api.v1beta1 import event_pb2
 
 
 class TestEvent:
@@ -76,3 +78,19 @@ class TestEvent:
 
         with pytest.raises(TypeError):
             Event(data="notbytes", mimetype=mt.TextPlain)
+
+    @pytest.mark.asyncio
+    async def test_nack_event(self):
+        """
+        Test nack-ing an event.
+        """
+
+        event = Event(data=b"test", mimetype=mt.Unknown)
+        event._state = EventState.SUBSCRIBED
+        event._stream = BidiQueue()
+        await event.nack(nack.UnknownType)
+
+        assert event.nacked()
+        req = await event._stream.read_request()
+        assert isinstance(req, ensign_pb2.SubscribeRequest)
+        assert req.nack.code == nack.UnknownType
