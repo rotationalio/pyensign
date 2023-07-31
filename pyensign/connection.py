@@ -1,9 +1,7 @@
 import grpc
 import asyncio
-import inspect
 from ulid import ULID
 from grpc import aio
-from functools import wraps
 from datetime import timedelta
 
 from pyensign.api.v1beta1 import topic_pb2
@@ -11,6 +9,10 @@ from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.tasks import WorkerPool
 from pyensign.exceptions import catch_rpc_error
 from pyensign.api.v1beta1 import ensign_pb2_grpc
+from pyensign.auth.interceptor import (
+    MetadataUnaryInterceptor,
+    MetadataStreamInterceptor,
+)
 from pyensign.stream import Publisher, Subscriber
 from pyensign.exceptions import (
     EnsignClientClosingError,
@@ -42,8 +44,6 @@ class Connection:
             raise ValueError("Invalid address:port format")
         self.addrport = addrport
 
-        if insecure and auth:
-            raise ValueError("Cannot use auth with insecure=True")
         self.insecure = insecure
         self.auth = auth
 
@@ -53,18 +53,22 @@ class Connection:
         responsible for closing the channel.
         """
 
+        interceptors = []
+        if self.auth is not None:
+            creds_fn = self.auth.credentials
+            interceptors.append(MetadataUnaryInterceptor(creds_fn))
+            interceptors.append(MetadataStreamInterceptor(creds_fn))
+
         if self.insecure:
-            return aio.insecure_channel(self.addrport)
+            channel = aio.insecure_channel(self.addrport, interceptors=interceptors)
         else:
-            credentials = grpc.ssl_channel_credentials()
-            if self.auth is not None:
-                call_credentials = grpc.metadata_call_credentials(
-                    self.auth, name="auth gateway"
-                )
-                credentials = grpc.composite_channel_credentials(
-                    credentials, call_credentials
-                )
-            return aio.secure_channel(self.addrport, credentials)
+            channel = aio.secure_channel(
+                self.addrport,
+                credentials=grpc.ssl_channel_credentials(),
+                interceptors=interceptors,
+            )
+
+        return channel
 
 
 class Client:
