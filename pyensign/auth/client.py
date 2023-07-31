@@ -66,10 +66,14 @@ class AuthClient(grpc.AuthMetadataPlugin):
 
         # Refresh the access token if not valid
         if not self._access_valid():
-            # If refresh is valid then it can be used to get a new access token
-            # Otherwise, full authentication is required
             if self._refresh_valid():
-                self.refresh()
+                # If there is a valid, non-expired refresh token, try to use it to get
+                # a new access token
+                try:
+                    self.refresh()
+                except AuthenticationError:
+                    # If refresh fails, attempt to re-authenticate using credentials
+                    self.authenticate()
             else:
                 self.authenticate()
 
@@ -77,9 +81,18 @@ class AuthClient(grpc.AuthMetadataPlugin):
         return ("authorization", "Bearer " + self._access_token)
 
     def authenticate(self):
+        """
+        Calls the authenticate endpoint and sets the access and refresh tokens. Raises
+        an AuthenticationError if the request fails or the server returns an error.
+        """
         self._do(self.url + "/v1/authenticate", self.creds)
 
     def refresh(self):
+        """
+        Calls the refresh endpoint and resets the access and refresh tokens based on
+        the response. Raises an AuthenticationError if the request fails or the server
+        returns an error.
+        """
         if not self._refresh_token:
             raise AuthenticationError("No refresh token available")
         body = {"refresh_token": self._refresh_token}
