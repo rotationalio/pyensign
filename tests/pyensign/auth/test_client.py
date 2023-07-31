@@ -122,6 +122,38 @@ class TestAuthClient:
         client._refresh_token = refresh
         assert client.credentials() == authbearer(valid_access())
 
+    def test_credentials_reauthenticate(self, httpserver: HTTPServer, client):
+        """
+        Test that if refresh fails, the client reauthenticates instead of giving up and
+        raising an exception.
+        """
+        httpserver.expect_request("/v1/refresh").respond_with_json(
+            {"error": "expired refresh token"}, status=400
+        )
+        httpserver.expect_request("/v1/authenticate").respond_with_json(
+            {"access_token": valid_access(), "refresh_token": valid_refresh()}
+        )
+
+        client._access_token = exp_access()
+        client._refresh_token = valid_refresh()
+        assert client.credentials() == authbearer(valid_access())
+
+    def test_credentials_reauthenticate_fail(self, httpserver: HTTPServer, client):
+        """
+        Test the case where the fallback reauthentication also fails.
+        """
+        httpserver.expect_request("/v1/refresh").respond_with_json(
+            {"error": "expired refresh token"}, status=400
+        )
+        httpserver.expect_request("/v1/authenticate").respond_with_json(
+            {"error": "expired access token"}, status=400
+        )
+
+        client._access_token = exp_access()
+        client._refresh_token = valid_refresh()
+        with pytest.raises(AuthenticationError):
+            client.credentials()
+
     def test_authenticate(self, httpserver: HTTPServer, client):
         response = {"access_token": valid_access(), "refresh_token": valid_refresh()}
         httpserver.expect_request("/v1/authenticate").respond_with_json(response)
