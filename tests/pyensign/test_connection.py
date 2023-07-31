@@ -2,7 +2,7 @@ import os
 import pytest
 import asyncio
 from datetime import timedelta
-from unittest.mock import patch
+from asyncmock import patch
 
 from ulid import ULID
 from grpc import RpcError
