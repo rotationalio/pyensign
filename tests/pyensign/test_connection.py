@@ -2,10 +2,10 @@ import os
 import pytest
 import asyncio
 from datetime import timedelta
+from asyncmock import patch
 
 from ulid import ULID
-from grpc import RpcError, aio
-from pytest_httpserver import HTTPServer
+from grpc import RpcError
 
 from pyensign.events import Event
 from pyensign.utils.topics import Topic
@@ -18,7 +18,12 @@ from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 
-from pyensign.exceptions import UnknownTopicError, EnsignTimeoutError
+from pyensign.exceptions import (
+    UnknownTopicError,
+    EnsignTimeoutError,
+    AuthenticationError,
+    EnsignRPCError,
+)
 
 
 @pytest.fixture
@@ -49,7 +54,7 @@ def grpc_servicer():
 
 
 @pytest.fixture()
-def client(grpc_addr, grpc_server):
+def client(grpc_addr, grpc_server, auth):
     """
     This defines a client fixture that connects to the mock gRPC service which is
     listening on grpc_addr.
@@ -58,7 +63,7 @@ def client(grpc_addr, grpc_server):
     need to figure out a better way of handling that.
     """
     return Client(
-        MockConnection(grpc_addr),
+        Connection(grpc_addr, insecure=True, auth=auth),
         topic_cache=Cache(),
         reconnect_tick=timedelta(milliseconds=1),
         reconnect_timeout=timedelta(milliseconds=5),
@@ -66,9 +71,9 @@ def client(grpc_addr, grpc_server):
 
 
 @pytest.fixture()
-def client_no_reconnect(grpc_addr, grpc_server):
+def client_no_reconnect(grpc_addr, grpc_server, auth):
     return Client(
-        MockConnection(grpc_addr),
+        Connection(grpc_addr, insecure=True, auth=auth),
         topic_cache=Cache(),
         reconnect_tick=timedelta(milliseconds=1),
         reconnect_timeout=timedelta(milliseconds=0),
@@ -76,9 +81,15 @@ def client_no_reconnect(grpc_addr, grpc_server):
 
 
 @pytest.fixture
-def auth(httpserver: HTTPServer):
-    creds = {"client_id": "id", "client_secret": "secret"}
-    return AuthClient(httpserver.url_for(""), creds)
+def auth():
+    return MockAuthClient(
+        "localhost:5356", {"client_id": "id", "client_secret": "secret"}
+    )
+
+
+class MockAuthClient(AuthClient):
+    def credentials(self):
+        return ("authorization", "Bearer supersecretsquirrel")
 
 
 @pytest.fixture
@@ -135,21 +146,6 @@ class TestConnection:
         with pytest.raises(ValueError):
             Connection(addrport)
 
-    def test_connect_bad_args(self):
-        with pytest.raises(ValueError):
-            Connection(
-                "localhost:5356", insecure=True, auth=AuthClient("localhost:5356", {})
-            )
-
-
-class MockConnection(Connection):
-    def __init__(self, addr):
-        self.addr = addr
-        pass
-
-    def create_channel(self):
-        return aio.insecure_channel(self.addr)
-
 
 OTTERS_TOPIC = Topic(id=ULID(), name="otters")
 
@@ -162,6 +158,26 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     pytest output.
     """
 
+    def authorize(fn):
+        def wrap(*args, **kwargs):
+            self = args[0]
+            self.check_authorize(args[2])
+            return fn(*args, **kwargs)
+
+        return wrap
+
+    def check_authorize(self, context):
+        """
+        Check that the client is sending an authorization header.
+        """
+        for meta in context.invocation_metadata():
+            if "authorization" in meta.key:
+                assert meta.value == "Bearer supersecretsquirrel"
+                return True
+
+        assert False, "No authorization header sent by client"
+
+    @authorize
     def Publish(self, request_iterator, context):
         # First client request should be an open_stream
         req = next(request_iterator)
@@ -188,6 +204,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
 
         yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
 
+    @authorize
     def Subscribe(self, request_iterator, context):
         # First client request should be a subscription
         req = next(request_iterator)
@@ -219,6 +236,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
 
         yield ensign_pb2.SubscribeReply(close_stream=ensign_pb2.CloseStream())
 
+    @authorize
     def ListTopics(self, request, context):
         topics = [
             topic_pb2.Topic(name="expresso"),
@@ -226,15 +244,19 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         ]
         return topic_pb2.TopicsPage(topics=topics, next_page_token="next")
 
+    @authorize
     def CreateTopic(self, request, context):
         return topic_pb2.Topic(id=request.id)
 
+    @authorize
     def RetrieveTopic(self, request, context):
         return topic_pb2.Topic(id=request.id)
 
+    @authorize
     def DeleteTopic(self, request, context):
         return topic_pb2.TopicTombstone(id=request.id)
 
+    @authorize
     def TopicNames(self, request, context):
         names = [
             topic_pb2.TopicName(name="expresso"),
@@ -242,9 +264,11 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         ]
         return topic_pb2.TopicNamesPage(topic_names=names, next_page_token="next")
 
+    @authorize
     def TopicExists(self, request, context):
         return topic_pb2.TopicExistsInfo(query="query", exists=True)
 
+    @authorize
     def Info(self, request, context):
         return ensign_pb2.ProjectInfo(
             project_id=str(ULID()),
@@ -353,6 +377,7 @@ class TestClient:
     async def test_publish_unknown_topic(self, topic, client):
         with pytest.raises(UnknownTopicError):
             await client.publish(topic, [])
+        await client.close()
 
     def test_publish_sync(self, client):
         """
@@ -545,6 +570,21 @@ class TestClient:
         assert uptime is not None
         assert not_before is not None
         assert not_after is not None
+
+    @pytest.mark.asyncio
+    @patch.object(MockAuthClient, "credentials")
+    async def test_auth_error(self, credentials, client):
+        """
+        Test that authentication errors are propagated back to the caller.
+        """
+        credentials.side_effect = AuthenticationError("wrong credentials")
+        with pytest.raises(EnsignRPCError):
+            await client.list_topics()
+
+        with pytest.raises(EnsignRPCError):
+            await client.publish(
+                OTTERS_TOPIC, iter([Event(data=b"event 1", mimetype="text/plain")])
+            )
 
     @pytest.mark.asyncio
     async def test_insecure(self, live, ensignserver):
