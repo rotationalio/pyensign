@@ -1,7 +1,9 @@
+import re
 import time
 from enum import Enum
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from pyensign.utils import pbtime
 from pyensign import mimetypes as mtype
 from pyensign.api.v1beta1 import ensign_pb2, event_pb2
 from pyensign.exceptions import AckError, NackError
@@ -13,7 +15,14 @@ class Event:
     create and parse events.
     """
 
-    def __init__(self, data=None, mimetype=mtype.ApplicationJSON, meta={}):
+    def __init__(
+        self,
+        data=None,
+        mimetype=mtype.ApplicationJSON,
+        schema_name="Unknown",
+        schema_version="0.0.0",
+        meta=None,
+    ):
         """
         Create a new Event from a mimetype and data.
 
@@ -23,6 +32,12 @@ class Event:
             The data to use for the event.
         mimetype: str or int
             The mimetype of the data (e.g. "application/json").
+        schema_name: str (optional, default: "Unknown")
+            The name of the user-defined schema that the event data conforms to.
+            Subscribers consuming the event can use the schema to validate and parse
+            the event data.
+        schema_version: str (optional, default: "0.0.0")
+            The semantic version string of the user-defined schema.
         meta: dict (optional)
             A set of key-value pairs to associate with the event.
         """
@@ -33,13 +48,18 @@ class Event:
         if mimetype is None:
             raise ValueError("no mimetype provided")
 
+        schema_name = schema_name.strip()
+        if schema_name == "":
+            raise ValueError("schema name cannot be empty")
+
         self.mimetype = mtype.parse(mimetype)
 
         # Fields that the user may want to modify after creation.
         self.data = data
         self.meta = meta
-        self.type = event_pb2.Type(
-            name="Generic", major_version=1, minor_version=0, patch_version=0
+        self.type = Type(
+            name=schema_name,
+            version=schema_version,
         )
         self.created = Timestamp(seconds=int(time.time()))
 
@@ -68,7 +88,7 @@ class Event:
             data=self.data,
             metadata=self.meta,
             mimetype=self.mimetype,
-            type=self.type,
+            type=self.type.proto(),
             created=self.created,
         )
 
@@ -185,6 +205,108 @@ class Event:
         self._stream = ackback_stream
         self._state = EventState.SUBSCRIBED
 
+    def __repr__(self):
+        repr = "Event("
+        repr += "data={}, ".format(self.data)
+        repr += "mimetype={}, ".format(self.mimetype)
+        repr += "schema_name={}, ".format(self.type.name)
+        repr += "schema_version={}, ".format(self.type.semver())
+        if self.meta:
+            repr += "meta={}".format(self.meta)
+        repr += ")"
+        return repr
+
+    def __str__(self):
+        s = "Event:"
+        if self.id:
+            s += "\n\tid: {}".format(self.id)
+        data = str(self.data)
+        if len(data) > 100:
+            data = data[:100] + "..."
+        s += "\n\tdata: {}".format(data)
+        s += "\n\tmimetype: {}".format(mtype.to_str(self.mimetype))
+        s += "\n\tschema: {}".format(self.type)
+        if self.meta:
+            s += "\n\tmeta: {}".format(self.meta)
+        s += "\n\tstate: {}".format(self._state)
+        s += "\n\tcreated: {}".format(str(pbtime.to_datetime(self.created)))
+        if self.committed:
+            s += "\n\tcommitted: {}".format(str(pbtime.to_datetime(self.committed)))
+        if self.error:
+            s += "\n\terror: {}".format(self.error)
+        return s
+
+
+class Type:
+    """
+    Type is a high level abstraction over the protocol buffer type that represents an
+    event schema.
+    """
+
+    def __init__(self, name, version=None):
+        """
+        Create a new schema Type from the name and semantic version.
+
+        Parameters
+        ----------
+        name : str
+            The name of the schema.
+
+        version : str (optional)
+            The semantic version of the schema which must be parseable as a semver
+            2.0.0 string (e.g. "1.0.0").
+        """
+
+        self.name = name
+        if version:
+            self.parse_version(version)
+
+    semver_pattern = re.compile(
+        r"^v*(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
+    )
+
+    def parse_version(self, version):
+        """
+        Parse a semver 2.0.0 version string into the major, minor, and patch components.
+        Pre-release and build metadata are ignored. See https://semver.org/ and
+        https://regex101.com/r/Ly7O1x/3/ for more on parsing.
+        """
+
+        match = Type.semver_pattern.search(version)
+        if not match:
+            raise ValueError("unparseable semantic version: {}".format(version))
+        results = match.groupdict()
+        self.major_version = int(results["major"])
+        self.minor_version = int(results["minor"])
+        self.patch_version = int(results["patch"])
+
+    def semver(self):
+        """
+        Return the semver 2.0.0 representation of the version.
+        """
+
+        return "{}.{}.{}".format(
+            self.major_version, self.minor_version, self.patch_version
+        )
+
+    def proto(self):
+        """
+        Return the protocol buffer representation of the schema type.
+        """
+
+        return event_pb2.Type(
+            name=self.name,
+            major_version=self.major_version,
+            minor_version=self.minor_version,
+            patch_version=self.patch_version,
+        )
+
+    def __repr__(self):
+        return "Type(name={}, version={})".format(self.name, self.semver())
+
+    def __str__(self):
+        return "{} v{}".format(self.name, self.semver())
+
 
 class EventState(Enum):
     # Event has been created but not published
@@ -219,7 +341,14 @@ def from_proto(proto):
         mimetype=proto.mimetype,
         meta=proto.metadata,
     )
-    event.type = proto.type
+
+    # Convert the schema type from the protocol buffer
+    event.type = Type(
+        name=proto.type.name,
+    )
+    event.type.major_version = proto.type.major_version
+    event.type.minor_version = proto.type.minor_version
+    event.type.patch_version = proto.type.patch_version
     event.created = proto.created
     return event
 
