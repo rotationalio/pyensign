@@ -224,7 +224,13 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
             ew = event_pb2.EventWrapper(
                 id=ULID().bytes,
                 event=event_pb2.Event(
-                    data="event {}".format(i).encode()
+                    data="event {}".format(i).encode(),
+                    type=event_pb2.Type(
+                        name="message",
+                        major_version=1,
+                        minor_version=2,
+                        patch_version=3,
+                    ),
                 ).SerializeToString(),
             )
             yield ensign_pb2.SubscribeReply(event=ew)
@@ -501,6 +507,7 @@ class TestClient:
         async for event in client.subscribe(iter(["expresso", "arabica"])):
             assert isinstance(event, Event)
             await event.ack()
+            assert str(event.type) == "message v1.2.3"
             event_ids.append(event.id)
             if len(event_ids) == 3:
                 break

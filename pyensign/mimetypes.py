@@ -166,3 +166,13 @@ def parse(mimetype):
         return values_by_name[m]
 
     raise ValueError("unrecognized mimetype: {}".format(mimetype))
+
+
+def to_str(mimetype):
+    """
+    Convert a mimetype integer value to a string.
+    """
+
+    if mimetype in names_by_value:
+        return names_by_value[mimetype]
+    raise ValueError("unrecognized mimetype: {}".format(mimetype))

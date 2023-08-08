@@ -507,7 +507,12 @@ class TestEnsign:
             pytest.skip("Skipping live test")
 
         ensign = Ensign(endpoint=ensignserver, auth_url=authserver, cred_path=creds)
-        event = Event(b"message in a bottle", "text/plain")
+        event = Event(
+            b"message in a bottle",
+            "text/plain",
+            schema_name="message",
+            schema_version="1.0.0",
+        )
         topic = "pyensign-pub-sub"
 
         # Ensure the topic exists
@@ -522,7 +527,6 @@ class TestEnsign:
 
         async def pub():
             # Delay the publisher to prevent deadlock
-            await asyncio.sleep(1)
             await ensign.publish(topic, event, on_ack=handle_ack)
             await publish_ack.wait()
 
@@ -536,10 +540,7 @@ class TestEnsign:
         assert not event.nacked()
         assert received.acked()
         assert not received.nacked()
+        assert str(received.type) == "message v1.0.0"
         assert received.data == b"message in a bottle"
         assert received.mimetype == MIME.TEXT_PLAIN
-        assert received.type.name == "Generic"
-        assert received.type.major_version == 1
-        assert received.type.minor_version == 0
-        assert received.type.patch_version == 0
         assert received.id
