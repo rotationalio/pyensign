@@ -71,9 +71,20 @@ await client.publish("weather", event, on_ack=handle_ack, on_nack=handle_nack)
 Use `Ensign.subscribe()` to subscribe to one or more topics.
 
 ```python
-async for event in client.subscribe("weather", "forecast")
-    print(f"Received event with data: {event.data}")
+async for event in client.subscribe("weather", "forecast"):
+    print(event)
     event.ack()
+```
+
+```
+Event:
+	id: b'\x01\x89\xd2\x1a?,A\x03\xf2\x04\xa6yd\xdf\x0b<'
+	data: b'{"temp": "72", "units": "fahrenheit"}'
+	mimetype: application/json
+	schema: WeatherUpdate v1.0.0
+	state: EventState.SUBSCRIBED
+	created: 2023-08-07 17:24:41
+	committed: 2023-08-07 17:24:42.930920
 ```
 
 The `Event` object contains methods for acking and nacking an event back to the Ensign service. Subscribers should normally call `Event.ack()` once the event has been successfully consumed, or `Event.nack()` if the event needs to be redelivered.
