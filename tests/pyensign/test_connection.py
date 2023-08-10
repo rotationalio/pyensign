@@ -166,6 +166,14 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
 
         return wrap
 
+    def user_agent(fn):
+        def wrap(*args, **kwargs):
+            self = args[0]
+            self.check_user_agent(args[2])
+            return fn(*args, **kwargs)
+
+        return wrap
+
     def check_authorize(self, context):
         """
         Check that the client is sending an authorization header.
@@ -177,7 +185,19 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
 
         assert False, "No authorization header sent by client"
 
+    def check_user_agent(self, context):
+        """
+        Check that the client is setting the PyEnsign user agent.
+        """
+        for meta in context.invocation_metadata():
+            if "user-agent" in meta.key:
+                assert "pyensign" in meta.value
+                return True
+
+        assert False, "No user-agent header sent by client"
+
     @authorize
+    @user_agent
     def Publish(self, request_iterator, context):
         # First client request should be an open_stream
         req = next(request_iterator)
@@ -205,6 +225,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
 
     @authorize
+    @user_agent
     def Subscribe(self, request_iterator, context):
         # First client request should be a subscription
         req = next(request_iterator)
@@ -243,6 +264,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         yield ensign_pb2.SubscribeReply(close_stream=ensign_pb2.CloseStream())
 
     @authorize
+    @user_agent
     def ListTopics(self, request, context):
         topics = [
             topic_pb2.Topic(name="expresso"),
@@ -251,18 +273,22 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         return topic_pb2.TopicsPage(topics=topics, next_page_token="next")
 
     @authorize
+    @user_agent
     def CreateTopic(self, request, context):
         return topic_pb2.Topic(id=request.id)
 
     @authorize
+    @user_agent
     def RetrieveTopic(self, request, context):
         return topic_pb2.Topic(id=request.id)
 
     @authorize
+    @user_agent
     def DeleteTopic(self, request, context):
         return topic_pb2.TopicTombstone(id=request.id)
 
     @authorize
+    @user_agent
     def TopicNames(self, request, context):
         names = [
             topic_pb2.TopicName(name="expresso"),
@@ -271,10 +297,12 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         return topic_pb2.TopicNamesPage(topic_names=names, next_page_token="next")
 
     @authorize
+    @user_agent
     def TopicExists(self, request, context):
         return topic_pb2.TopicExistsInfo(query="query", exists=True)
 
     @authorize
+    @user_agent
     def Info(self, request, context):
         return ensign_pb2.ProjectInfo(
             project_id=str(ULID()),
@@ -283,6 +311,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
             events=100,
         )
 
+    @user_agent
     def Status(self, request, context):
         return ensign_pb2.ServiceState(
             status=1,

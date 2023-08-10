@@ -4,6 +4,7 @@ from ulid import ULID
 from grpc import aio
 from datetime import timedelta
 
+from pyensign.version import user_agent
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.tasks import WorkerPool
@@ -53,19 +54,26 @@ class Connection:
         responsible for closing the channel.
         """
 
+        # Create interceptors for authentication
         interceptors = []
         if self.auth is not None:
             creds_fn = self.auth.credentials
             interceptors.append(MetadataUnaryInterceptor(creds_fn))
             interceptors.append(MetadataStreamInterceptor(creds_fn))
 
+        # Add the user agent to the options
+        options = (("grpc.primary_user_agent", user_agent()),)
+
         if self.insecure:
-            channel = aio.insecure_channel(self.addrport, interceptors=interceptors)
+            channel = aio.insecure_channel(
+                self.addrport, interceptors=interceptors, options=options
+            )
         else:
             channel = aio.secure_channel(
                 self.addrport,
                 credentials=grpc.ssl_channel_credentials(),
                 interceptors=interceptors,
+                options=options,
             )
 
         return channel
