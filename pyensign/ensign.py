@@ -248,6 +248,12 @@ class Ensign:
         ):
             yield event
 
+    async def query(self, query, params):
+        raise NotImplementedError
+
+    async def explain_query(self, query, params):
+        raise NotImplementedError
+
     async def get_topics(self):
         """
         Get all topics.

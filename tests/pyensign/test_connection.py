@@ -305,9 +305,9 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     @user_agent
     def Info(self, request, context):
         return ensign_pb2.ProjectInfo(
-            project_id=str(ULID()),
-            topics=3,
-            readonly_topics=1,
+            project_id=ULID().bytes,
+            num_topics=3,
+            num_readonly_topics=1,
             events=100,
         )
 
@@ -593,9 +593,9 @@ class TestClient:
     async def test_info(self, client):
         topic_ids = [ULID().bytes, ULID().bytes]
         info = await client.info(topics=topic_ids)
-        assert ULID.from_str(info.project_id) is not None
-        assert info.topics > 0
-        assert info.readonly_topics > 0
+        assert ULID.from_bytes(info.project_id) is not None
+        assert info.num_topics > 0
+        assert info.num_readonly_topics > 0
         assert info.events > 0
 
     @pytest.mark.asyncio

@@ -29,6 +29,7 @@ python3 -m grpc_tools.protoc -I$PROTO_DIR \
     $API/event.proto \
     $API/groups.proto \
     $API/topic.proto \
+    $API/query.proto \
 
 python3 -m grpc_tools.protoc -I$PROTO_DIR \
     --python_out=pyensign \

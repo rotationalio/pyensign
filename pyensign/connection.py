@@ -5,11 +5,10 @@ from grpc import aio
 from datetime import timedelta
 
 from pyensign.version import user_agent
-from pyensign.api.v1beta1 import topic_pb2
-from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.tasks import WorkerPool
 from pyensign.exceptions import catch_rpc_error
 from pyensign.api.v1beta1 import ensign_pb2_grpc
+from pyensign.api.v1beta1 import topic_pb2, ensign_pb2, query_pb2
 from pyensign.auth.interceptor import (
     MetadataUnaryInterceptor,
     MetadataStreamInterceptor,
@@ -188,6 +187,8 @@ class Client:
 
     @catch_rpc_error
     async def subscribe(self, topics, query="", consumer_group=None):
+        # TODO: Support query parameters
+
         # Ensure we have a gRPC channel
         self._ensure_ready()
 
@@ -205,7 +206,7 @@ class Client:
             subscriber = Subscriber(
                 self,
                 topics,
-                query=query,
+                query=query_pb2.Query(query=query),
                 consumer_group=consumer_group,
                 reconnect_tick=self.reconnect_tick,
                 reconnect_timeout=self.reconnect_timeout,
@@ -225,6 +226,19 @@ class Client:
         # Consume the events and yield them to the caller
         async for event in subscriber.consume():
             yield event
+
+    @catch_rpc_error
+    async def en_sql(self, query="", params=None):
+        self._ensure_ready()
+        req = query_pb2.Query(query=query, params=params)
+        async for event in self.stub.EnSQL(req):
+            yield event
+
+    @catch_rpc_error
+    async def explain(self, query="", params=None):
+        self._ensure_ready()
+        req = query_pb2.Query(query=query, params=params)
+        return await self.stub.Explain(req)
 
     @catch_rpc_error
     async def list_topics(self, page_size=100, next_page_token=""):
