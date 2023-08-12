@@ -3,6 +3,8 @@
 import grpc
 
 from pyensign.api.v1beta1 import ensign_pb2 as api_dot_v1beta1_dot_ensign__pb2
+from pyensign.api.v1beta1 import event_pb2 as api_dot_v1beta1_dot_event__pb2
+from pyensign.api.v1beta1 import query_pb2 as api_dot_v1beta1_dot_query__pb2
 from pyensign.api.v1beta1 import topic_pb2 as api_dot_v1beta1_dot_topic__pb2
 
 
@@ -29,6 +31,16 @@ class EnsignStub(object):
             "/ensign.v1beta1.Ensign/Subscribe",
             request_serializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeRequest.SerializeToString,
             response_deserializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeReply.FromString,
+        )
+        self.EnSQL = channel.unary_stream(
+            "/ensign.v1beta1.Ensign/EnSQL",
+            request_serializer=api_dot_v1beta1_dot_query__pb2.Query.SerializeToString,
+            response_deserializer=api_dot_v1beta1_dot_event__pb2.EventWrapper.FromString,
+        )
+        self.Explain = channel.unary_unary(
+            "/ensign.v1beta1.Ensign/Explain",
+            request_serializer=api_dot_v1beta1_dot_query__pb2.Query.SerializeToString,
+            response_deserializer=api_dot_v1beta1_dot_query__pb2.QueryExplanation.FromString,
         )
         self.ListTopics = channel.unary_unary(
             "/ensign.v1beta1.Ensign/ListTopics",
@@ -100,6 +112,21 @@ class EnsignServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def EnSQL(self, request, context):
+        """EnSQL is a server-side streaming RPC that executes an query and returns a stream
+        of events as a result set back from the query. It terminates once all results
+        have been returned or the client terminates the stream.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def Explain(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def ListTopics(self, request, context):
         """This is a simple topic management interface. Right now we assume that topics are
         immutable, therefore there is no update topic RPC call. There are two ways to
@@ -165,6 +192,16 @@ def add_EnsignServicer_to_server(servicer, server):
             servicer.Subscribe,
             request_deserializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeRequest.FromString,
             response_serializer=api_dot_v1beta1_dot_ensign__pb2.SubscribeReply.SerializeToString,
+        ),
+        "EnSQL": grpc.unary_stream_rpc_method_handler(
+            servicer.EnSQL,
+            request_deserializer=api_dot_v1beta1_dot_query__pb2.Query.FromString,
+            response_serializer=api_dot_v1beta1_dot_event__pb2.EventWrapper.SerializeToString,
+        ),
+        "Explain": grpc.unary_unary_rpc_method_handler(
+            servicer.Explain,
+            request_deserializer=api_dot_v1beta1_dot_query__pb2.Query.FromString,
+            response_serializer=api_dot_v1beta1_dot_query__pb2.QueryExplanation.SerializeToString,
         ),
         "ListTopics": grpc.unary_unary_rpc_method_handler(
             servicer.ListTopics,
@@ -270,6 +307,64 @@ class Ensign(object):
             "/ensign.v1beta1.Ensign/Subscribe",
             api_dot_v1beta1_dot_ensign__pb2.SubscribeRequest.SerializeToString,
             api_dot_v1beta1_dot_ensign__pb2.SubscribeReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def EnSQL(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            "/ensign.v1beta1.Ensign/EnSQL",
+            api_dot_v1beta1_dot_query__pb2.Query.SerializeToString,
+            api_dot_v1beta1_dot_event__pb2.EventWrapper.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def Explain(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/ensign.v1beta1.Ensign/Explain",
+            api_dot_v1beta1_dot_query__pb2.Query.SerializeToString,
+            api_dot_v1beta1_dot_query__pb2.QueryExplanation.FromString,
             options,
             channel_credentials,
             insecure,

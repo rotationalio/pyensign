@@ -447,9 +447,9 @@ class TestEnsign:
     @patch("pyensign.connection.Client.info")
     async def test_info(self, mock_info, ensign):
         expected = ensign_pb2.ProjectInfo(
-            project_id=str(ULID),
-            topics=3,
-            readonly_topics=1,
+            project_id=ULID().bytes,
+            num_topics=3,
+            num_readonly_topics=1,
             events=100,
         )
         mock_info.return_value = expected
@@ -460,9 +460,9 @@ class TestEnsign:
     @patch("pyensign.connection.Client.info")
     async def test_info_filter(self, mock_info, ensign):
         expected = ensign_pb2.ProjectInfo(
-            project_id=str(ULID),
-            topics=3,
-            readonly_topics=1,
+            project_id=ULID().bytes,
+            num_topics=3,
+            num_readonly_topics=1,
             events=100,
         )
         mock_info.return_value = expected
