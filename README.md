@@ -73,7 +73,7 @@ Use `Ensign.subscribe()` to subscribe to one or more topics.
 ```python
 async for event in client.subscribe("weather", "forecast"):
     print(event)
-    event.ack()
+    await event.ack()
 ```
 
 ```
@@ -87,7 +87,7 @@ Event:
 	committed: 2023-08-07 17:24:42.930920
 ```
 
-The `Event` object contains methods for acking and nacking an event back to the Ensign service. Subscribers should normally call `Event.ack()` once the event has been successfully consumed, or `Event.nack()` if the event needs to be redelivered.
+The `Event` object contains coroutines for acking and nacking an event back to the Ensign service. Subscribers should normally invoke `Event.ack()` once the event has been successfully consumed, or `Event.nack()` if the event needs to be redelivered.
 
 ### Design patterns
 

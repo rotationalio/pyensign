@@ -39,7 +39,7 @@ Subscribe to one or more topics by providing the topic name(s) or ID(s).
 ```python
 async for event in client.subscribe("weather"):
     print("Received event with data: {}".format(event.data))
-    event.ack()
+    await event.ack()
 ```
 
 ## Advanced Usage
