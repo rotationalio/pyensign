@@ -21,7 +21,7 @@ from pyensign.mimetype.v1beta1 import (
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x17\x61pi/v1beta1/topic.proto\x12\x0e\x65nsign.v1beta1\x1a\x17\x61pi/v1beta1/event.proto\x1a\x1bregion/v1beta1/region.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fmimetype/v1beta1/mimetype.proto"\x96\x02\n\x05Topic\x12\n\n\x02id\x18\x01 \x01(\x0c\x12\x12\n\nproject_id\x18\x02 \x01(\x0c\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x10\n\x08readonly\x18\x04 \x01(\x08\x12\x0e\n\x06offset\x18\x05 \x01(\x04\x12\x0e\n\x06shards\x18\x06 \x01(\r\x12-\n\nplacements\x18\x0c \x03(\x0b\x32\x19.ensign.v1beta1.Placement\x12#\n\x05types\x18\r \x03(\x0b\x32\x14.ensign.v1beta1.Type\x12+\n\x07\x63reated\x18\x0e \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08modified\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp"?\n\tTopicName\x12\x10\n\x08topic_id\x18\x01 \x01(\t\x12\x12\n\nproject_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t"\xca\x01\n\tTopicInfo\x12\x10\n\x08topic_id\x18\x01 \x01(\x0c\x12\x12\n\nproject_id\x18\x02 \x01(\x0c\x12\x0e\n\x06\x65vents\x18\x03 \x01(\x04\x12\x12\n\nduplicates\x18\x04 \x01(\x04\x12\x17\n\x0f\x64\x61ta_size_bytes\x18\x05 \x01(\x04\x12,\n\x05types\x18\x0e \x03(\x0b\x32\x1d.ensign.v1beta1.EventTypeInfo\x12,\n\x08modified\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp"L\n\nTopicsPage\x12%\n\x06topics\x18\x01 \x03(\x0b\x32\x15.ensign.v1beta1.Topic\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t"Y\n\x0eTopicNamesPage\x12.\n\x0btopic_names\x18\x01 \x03(\x0b\x32\x19.ensign.v1beta1.TopicName\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t"~\n\x08TopicMod\x12\n\n\x02id\x18\x01 \x01(\t\x12\x35\n\toperation\x18\x02 \x01(\x0e\x32".ensign.v1beta1.TopicMod.Operation"/\n\tOperation\x12\x08\n\x04NOOP\x10\x00\x12\x0b\n\x07\x41RCHIVE\x10\x01\x12\x0b\n\x07\x44\x45STROY\x10\x02"\x85\x01\n\x0eTopicTombstone\x12\n\n\x02id\x18\x01 \x01(\t\x12\x34\n\x05state\x18\x02 \x01(\x0e\x32%.ensign.v1beta1.TopicTombstone.Status"1\n\x06Status\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0c\n\x08READONLY\x10\x01\x12\x0c\n\x08\x44\x45LETING\x10\x02"0\n\x0fTopicExistsInfo\x12\r\n\x05query\x18\x01 \x01(\t\x12\x0e\n\x06\x65xists\x18\x02 \x01(\x08"\x9c\x01\n\tPlacement\x12\r\n\x05\x65poch\x18\x01 \x01(\x04\x12\x32\n\x08sharding\x18\x02 \x01(\x0e\x32 .ensign.v1beta1.ShardingStrategy\x12\'\n\x07regions\x18\x03 \x03(\x0e\x32\x16.region.v1beta1.Region\x12#\n\x05nodes\x18\x04 \x03(\x0b\x32\x14.ensign.v1beta1.Node"x\n\x04Node\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08hostname\x18\x02 \x01(\t\x12\x0e\n\x06quorum\x18\x03 \x01(\x04\x12\r\n\x05shard\x18\x04 \x01(\x04\x12&\n\x06region\x18\x05 \x01(\x0e\x32\x16.region.v1beta1.Region\x12\x0b\n\x03url\x18\x06 \x01(\t"\xc8\x01\n\rEventTypeInfo\x12"\n\x04type\x18\x01 \x01(\x0b\x32\x14.ensign.v1beta1.Type\x12(\n\x08mimetype\x18\x02 \x01(\x0e\x32\x16.mimetype.v1beta1.MIME\x12\x0e\n\x06\x65vents\x18\n \x01(\x04\x12\x12\n\nduplicates\x18\x0b \x01(\x04\x12\x17\n\x0f\x64\x61ta_size_bytes\x18\x0c \x01(\x04\x12,\n\x08modified\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp*m\n\x10ShardingStrategy\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0f\n\x0bNO_SHARDING\x10\x01\x12\x17\n\x13\x43ONSISTENT_KEY_HASH\x10\x02\x12\n\n\x06RANDOM\x10\x03\x12\x16\n\x12PUBLISHER_ORDERING\x10\x04\x62\x06proto3'
+    b'\n\x17\x61pi/v1beta1/topic.proto\x12\x0e\x65nsign.v1beta1\x1a\x17\x61pi/v1beta1/event.proto\x1a\x1bregion/v1beta1/region.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fmimetype/v1beta1/mimetype.proto"\x96\x02\n\x05Topic\x12\n\n\x02id\x18\x01 \x01(\x0c\x12\x12\n\nproject_id\x18\x02 \x01(\x0c\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x10\n\x08readonly\x18\x04 \x01(\x08\x12\x0e\n\x06offset\x18\x05 \x01(\x04\x12\x0e\n\x06shards\x18\x06 \x01(\r\x12-\n\nplacements\x18\x0c \x03(\x0b\x32\x19.ensign.v1beta1.Placement\x12#\n\x05types\x18\r \x03(\x0b\x32\x14.ensign.v1beta1.Type\x12+\n\x07\x63reated\x18\x0e \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08modified\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp"?\n\tTopicName\x12\x10\n\x08topic_id\x18\x01 \x01(\t\x12\x12\n\nproject_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t"\xe3\x01\n\tTopicInfo\x12\x10\n\x08topic_id\x18\x01 \x01(\x0c\x12\x12\n\nproject_id\x18\x02 \x01(\x0c\x12\x17\n\x0f\x65vent_offset_id\x18\x03 \x01(\x0c\x12\x0e\n\x06\x65vents\x18\x07 \x01(\x04\x12\x12\n\nduplicates\x18\x08 \x01(\x04\x12\x17\n\x0f\x64\x61ta_size_bytes\x18\t \x01(\x04\x12,\n\x05types\x18\x0e \x03(\x0b\x32\x1d.ensign.v1beta1.EventTypeInfo\x12,\n\x08modified\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp"L\n\nTopicsPage\x12%\n\x06topics\x18\x01 \x03(\x0b\x32\x15.ensign.v1beta1.Topic\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t"Y\n\x0eTopicNamesPage\x12.\n\x0btopic_names\x18\x01 \x03(\x0b\x32\x19.ensign.v1beta1.TopicName\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t"~\n\x08TopicMod\x12\n\n\x02id\x18\x01 \x01(\t\x12\x35\n\toperation\x18\x02 \x01(\x0e\x32".ensign.v1beta1.TopicMod.Operation"/\n\tOperation\x12\x08\n\x04NOOP\x10\x00\x12\x0b\n\x07\x41RCHIVE\x10\x01\x12\x0b\n\x07\x44\x45STROY\x10\x02"\x85\x01\n\x0eTopicTombstone\x12\n\n\x02id\x18\x01 \x01(\t\x12\x34\n\x05state\x18\x02 \x01(\x0e\x32%.ensign.v1beta1.TopicTombstone.Status"1\n\x06Status\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0c\n\x08READONLY\x10\x01\x12\x0c\n\x08\x44\x45LETING\x10\x02"0\n\x0fTopicExistsInfo\x12\r\n\x05query\x18\x01 \x01(\t\x12\x0e\n\x06\x65xists\x18\x02 \x01(\x08"\x9c\x01\n\tPlacement\x12\r\n\x05\x65poch\x18\x01 \x01(\x04\x12\x32\n\x08sharding\x18\x02 \x01(\x0e\x32 .ensign.v1beta1.ShardingStrategy\x12\'\n\x07regions\x18\x03 \x03(\x0e\x32\x16.region.v1beta1.Region\x12#\n\x05nodes\x18\x04 \x03(\x0b\x32\x14.ensign.v1beta1.Node"x\n\x04Node\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08hostname\x18\x02 \x01(\t\x12\x0e\n\x06quorum\x18\x03 \x01(\x04\x12\r\n\x05shard\x18\x04 \x01(\x04\x12&\n\x06region\x18\x05 \x01(\x0e\x32\x16.region.v1beta1.Region\x12\x0b\n\x03url\x18\x06 \x01(\t"\xc8\x01\n\rEventTypeInfo\x12"\n\x04type\x18\x01 \x01(\x0b\x32\x14.ensign.v1beta1.Type\x12(\n\x08mimetype\x18\x02 \x01(\x0e\x32\x16.mimetype.v1beta1.MIME\x12\x0e\n\x06\x65vents\x18\n \x01(\x04\x12\x12\n\nduplicates\x18\x0b \x01(\x04\x12\x17\n\x0f\x64\x61ta_size_bytes\x18\x0c \x01(\x04\x12,\n\x08modified\x18\x0f \x01(\x0b\x32\x1a.google.protobuf.Timestamp*m\n\x10ShardingStrategy\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0f\n\x0bNO_SHARDING\x10\x01\x12\x17\n\x13\x43ONSISTENT_KEY_HASH\x10\x02\x12\n\n\x06RANDOM\x10\x03\x12\x16\n\x12PUBLISHER_ORDERING\x10\x04\x62\x06proto3'
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
@@ -29,32 +29,32 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "api.v1beta1.topic_pb2", glo
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    _SHARDINGSTRATEGY._serialized_start = 1681
-    _SHARDINGSTRATEGY._serialized_end = 1790
+    _SHARDINGSTRATEGY._serialized_start = 1706
+    _SHARDINGSTRATEGY._serialized_end = 1815
     _TOPIC._serialized_start = 164
     _TOPIC._serialized_end = 442
     _TOPICNAME._serialized_start = 444
     _TOPICNAME._serialized_end = 507
     _TOPICINFO._serialized_start = 510
-    _TOPICINFO._serialized_end = 712
-    _TOPICSPAGE._serialized_start = 714
-    _TOPICSPAGE._serialized_end = 790
-    _TOPICNAMESPAGE._serialized_start = 792
-    _TOPICNAMESPAGE._serialized_end = 881
-    _TOPICMOD._serialized_start = 883
-    _TOPICMOD._serialized_end = 1009
-    _TOPICMOD_OPERATION._serialized_start = 962
-    _TOPICMOD_OPERATION._serialized_end = 1009
-    _TOPICTOMBSTONE._serialized_start = 1012
-    _TOPICTOMBSTONE._serialized_end = 1145
-    _TOPICTOMBSTONE_STATUS._serialized_start = 1096
-    _TOPICTOMBSTONE_STATUS._serialized_end = 1145
-    _TOPICEXISTSINFO._serialized_start = 1147
-    _TOPICEXISTSINFO._serialized_end = 1195
-    _PLACEMENT._serialized_start = 1198
-    _PLACEMENT._serialized_end = 1354
-    _NODE._serialized_start = 1356
-    _NODE._serialized_end = 1476
-    _EVENTTYPEINFO._serialized_start = 1479
-    _EVENTTYPEINFO._serialized_end = 1679
+    _TOPICINFO._serialized_end = 737
+    _TOPICSPAGE._serialized_start = 739
+    _TOPICSPAGE._serialized_end = 815
+    _TOPICNAMESPAGE._serialized_start = 817
+    _TOPICNAMESPAGE._serialized_end = 906
+    _TOPICMOD._serialized_start = 908
+    _TOPICMOD._serialized_end = 1034
+    _TOPICMOD_OPERATION._serialized_start = 987
+    _TOPICMOD_OPERATION._serialized_end = 1034
+    _TOPICTOMBSTONE._serialized_start = 1037
+    _TOPICTOMBSTONE._serialized_end = 1170
+    _TOPICTOMBSTONE_STATUS._serialized_start = 1121
+    _TOPICTOMBSTONE_STATUS._serialized_end = 1170
+    _TOPICEXISTSINFO._serialized_start = 1172
+    _TOPICEXISTSINFO._serialized_end = 1220
+    _PLACEMENT._serialized_start = 1223
+    _PLACEMENT._serialized_end = 1379
+    _NODE._serialized_start = 1381
+    _NODE._serialized_end = 1501
+    _EVENTTYPEINFO._serialized_start = 1504
+    _EVENTTYPEINFO._serialized_end = 1704
 # @@protoc_insertion_point(module_scope)
