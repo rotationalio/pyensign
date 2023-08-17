@@ -15,8 +15,8 @@ DeliverAgainNotMe = Nack.Code.DELIVER_AGAIN_NOT_ME
 # should inspect the error code in a Nack returned by the Ensign service to determine
 # why the event was not published.
 MaxEventSizeExceeded = Nack.Code.MAX_EVENT_SIZE_EXCEEDED
-TopicUnknown = Nack.Code.TOPIC_UKNOWN
-TopicArchived = Nack.Code.TOPIC_ARCHVIVED
+TopicUnknown = Nack.Code.TOPIC_UNKNOWN
+TopicArchived = Nack.Code.TOPIC_ARCHIVED
 TopicDeleted = Nack.Code.TOPIC_DELETED
 PermissionDenied = Nack.Code.PERMISSION_DENIED
 ConsensusFailure = Nack.Code.CONSENSUS_FAILURE
