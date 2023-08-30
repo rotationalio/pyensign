@@ -7,6 +7,7 @@ from asyncmock import patch
 
 from pyensign.ensign import Ensign
 from pyensign.events import Event
+from pyensign.connection import Cursor
 from pyensign.utils.topics import Topic
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import topic_pb2
@@ -14,6 +15,10 @@ from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
     UnknownTopicError,
+    EnsignInvalidArgument,
+    InvalidQueryError,
+    CursorNoRows,
+    QueryNoRows,
 )
 from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
 
@@ -334,6 +339,54 @@ class TestEnsign:
         args, _ = mock_subscribe.call_args
         for id in args[0]:
             assert isinstance(ULID.from_str(id), ULID)
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.en_sql")
+    async def test_query(self, mock_en_sql, ensign):
+        mock_en_sql.return_value = Cursor()
+        cursor = await ensign.query("SELECT * FROM otters")
+        mock_en_sql.assert_called_once_with("SELECT * FROM otters", params=[])
+        assert isinstance(cursor, Cursor)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "raises, exception",
+        [
+            (EnsignInvalidArgument(None, None, "bad syntax"), InvalidQueryError),
+            (CursorNoRows, QueryNoRows),
+        ],
+    )
+    @patch("pyensign.connection.Client.en_sql")
+    async def test_query_error(self, mock_en_sql, raises, exception, ensign):
+        mock_en_sql.side_effect = raises
+        with pytest.raises(exception):
+            await ensign.query("SELECT * FROM otters")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "params, exception",
+        [
+            ({}, None),
+            ({"foo": 1}, None),
+            ({"foo": 2.3}, None),
+            ({"foo": True}, None),
+            ({"foo": b"data"}, None),
+            ({"foo": "bar"}, None),
+            ({"foo": "bar", "bar": 2}, None),
+            ({"foo": None}, TypeError),
+            ({"foo": [1, 2, 3]}, TypeError),
+            ({"foo": {"bar": 1}}, TypeError),
+        ],
+    )
+    @patch("pyensign.connection.Client.en_sql")
+    async def test_query_params(self, mock_en_sql, params, exception, ensign):
+        mock_en_sql.return_value = Cursor()
+        if exception:
+            with pytest.raises(exception):
+                await ensign.query("SELECT * FROM otters", params=params)
+        else:
+            cursor = await ensign.query("SELECT * FROM otters", params=params)
+            assert isinstance(cursor, Cursor)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")

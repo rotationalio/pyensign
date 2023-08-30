@@ -1,5 +1,6 @@
 import inspect
-from grpc import RpcError
+from grpc import StatusCode
+from grpc.aio import AioRpcError
 from functools import wraps
 
 ##########################################################################
@@ -78,13 +79,18 @@ def _handle_client_error(e):
     Provides error handling for errors raised by the gRPC client.
     """
 
-    if isinstance(e, RpcError):
+    if isinstance(e, AioRpcError):
         code = e.code()
-        raise EnsignRPCError(code.name, code.value, e.details()) from e
+        args = (code.name, code.value, e.details())
+        if code == StatusCode.INVALID_ARGUMENT:
+            raise EnsignInvalidArgument(*args) from e
+        raise EnsignRPCError(*args) from e
     elif isinstance(e, AttributeError):
         raise EnsignAttributeError(
             "error accessing field from Ensign response: {}".format(e)
         ) from e
+    elif isinstance(e, CursorNoRows):
+        raise e
     elif isinstance(e, EnsignTopicNotFoundError):
         raise UnknownTopicError(e.topic) from e
     elif isinstance(e, EnsignTypeError):
@@ -177,6 +183,55 @@ class NackError(PyEnsignError):
     pass
 
 
+class EnSQLError(PyEnsignError):
+    """
+    Query-related errors returned to the user
+    """
+
+    pass
+
+
+class InvalidQueryError(EnSQLError):
+    """
+    Raised when a query has invalid syntax
+    """
+
+    pass
+
+
+class QueryNoRows(EnSQLError):
+    """
+    Raised when a query returns no rows, this means that the query was valid but no
+    results were selected by the query
+    """
+
+    pass
+
+
+class CursorError(PyEnsignError):
+    """
+    Raised when PyEnsign encounters an error from an event cursor
+    """
+
+    pass
+
+
+class CursorNoRows(CursorError):
+    """
+    Raised when a cursor has no rows (e.g. no results from a query)
+    """
+
+    pass
+
+
+class CursorClosedError(CursorError):
+    """
+    Raised when a cursor is already closed
+    """
+
+    pass
+
+
 class EnsignError(PyEnsignError):
     """
     Raised when PyEnsign receives an error from the Ensign server
@@ -199,6 +254,14 @@ class EnsignRPCError(EnsignError):
         return "received gRPC error from Ensign: {}: {} ({})".format(
             self.name, self.details, self.code
         )
+
+    pass
+
+
+class EnsignInvalidArgument(EnsignRPCError):
+    """
+    Invalid arugment errors returned by Ensign
+    """
 
     pass
 

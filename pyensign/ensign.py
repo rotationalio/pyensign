@@ -6,11 +6,15 @@ from ulid import ULID
 from pyensign.connection import Client
 from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
-from pyensign.api.v1beta1 import topic_pb2
+from pyensign.api.v1beta1 import topic_pb2, query_pb2
 from pyensign.auth.client import AuthClient
 from pyensign.exceptions import (
     CacheMissError,
     UnknownTopicError,
+    InvalidQueryError,
+    QueryNoRows,
+    CursorNoRows,
+    EnsignInvalidArgument,
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
 )
@@ -248,8 +252,74 @@ class Ensign:
         ):
             yield event
 
-    async def query(self, query, params):
-        raise NotImplementedError
+    async def query(self, query, params=None):
+        """
+        Execute an EnSQL query. This method returns a cursor that can be used to fetch
+        the results of the query, via `fetchone()`, `fetchmany()`, or `fetchall()`
+        methods.
+
+        Parameters
+        ----------
+        query : str
+            A valid EnSQL query. EnSQL queries are similar to SQL queries on relational
+            databases, but instead of returning rows in tables they return events in
+            topic streams.
+
+            For example, the following query returns the first 10 events in a topic:
+
+            SELECT * FROM <topic> LIMIT 10
+
+            See https://ensign.rotational.dev/ensql for more information on the EnSQL syntax.
+
+        params : dict (optional)
+            Parameters to be substituted into the query. Only primitive types are
+            supported, i.e. strings, integers, floats, and booleans.
+
+        Returns
+        -------
+        connection.Cursor
+            The cursor object that can be used to fetch the results of the query.
+
+        Raises
+        ------
+        InvalidQueryError
+            If the provided query is invalid.
+
+        QueryNoRows
+            If the query returned no results.
+
+        TypeError
+            If an unsupported parameter type is provided.
+        """
+
+        # Parse the args into the protobuf parameters
+        parameters = []
+        if params:
+            for name, value in params.items():
+                if isinstance(value, int):
+                    parameters.append(query_pb2.Parameter(name=name, i=value))
+                elif isinstance(value, float):
+                    parameters.append(query_pb2.Parameter(name=name, d=value))
+                elif isinstance(value, bool):
+                    parameters.append(query_pb2.Parameter(name=name, b=value))
+                elif isinstance(value, bytes):
+                    parameters.append(query_pb2.Parameter(name=name, y=value))
+                elif isinstance(value, str):
+                    parameters.append(query_pb2.Parameter(name=name, s=value))
+                else:
+                    raise TypeError(
+                        "unsupported parameter type: {}".format(type(value).__name__)
+                    )
+
+        # Execute the query and return the cursor to the user
+        try:
+            cursor = await self.client.en_sql(query, params=parameters)
+        except EnsignInvalidArgument as e:
+            raise InvalidQueryError(e.details)
+        except CursorNoRows:
+            raise QueryNoRows("no results returned by query")
+
+        return cursor
 
     async def explain_query(self, query, params):
         raise NotImplementedError
