@@ -4,6 +4,7 @@ import json
 from ulid import ULID
 
 from pyensign.connection import Client
+from pyensign.status import ServerStatus
 from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
@@ -446,12 +447,12 @@ class Ensign:
 
         Returns
         -------
-        str
+        ServerStatus:
             Status of the server.
         """
 
         status, version, uptime, _, _ = await self.client.status()
-        return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
+        return ServerStatus(status, version, uptime)
 
     def _resolve_topic(self, topic):
         """
