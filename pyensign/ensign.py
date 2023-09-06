@@ -1,9 +1,11 @@
 import os
 import json
+import inspect
 
 from ulid import ULID
 
 from pyensign.connection import Client
+from pyensign.events import from_object
 from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
@@ -453,6 +455,19 @@ class Ensign:
         status, version, uptime, _, _ = await self.client.status()
         return "status: {}\nversion: {}\nuptime: {}".format(status, version, uptime)
 
+    async def close(self):
+        """
+        Close the Ensign client.
+        """
+        await self.client.close()
+
+    async def __aenter__(self):
+        await self.client.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        await self.close()
+
     def _resolve_topic(self, topic):
         """
         Resolve a topic string into a ULID by looking it up in the cache, otherwise
@@ -474,3 +489,203 @@ class Ensign:
             raise UnknownTopicError(
                 f"unknown topic '{topic}', please provide the name or ID of a topic in your project"
             )
+
+
+##########################################################################
+## Decorators
+##########################################################################
+
+# Global Ensign client. This is not thread-safe but it's safe to use concurrently in
+# asyncio coroutines.
+_client = None
+
+
+def authenticate(*auth_args, **auth_kwargs):
+    """
+    Decorator function to authenticate with Ensign. This function ideally should only
+    be called once, usually at the entry point in the application. Duplicate calls to
+    the decorator are ignored.
+
+    By default credentials are loaded from the ENSIGN_CLIENT_ID and ENSIGN_CLIENT_SECRET
+    environment variables. Alternatively, credentials can be provided as keyword
+    arguments or a JSON file path, see the Ensign class for more details.
+
+    Usage
+    -----
+    ```
+    # Use credentials from the environment
+    @authenticate()
+    async def main():
+        ...
+
+    # Use credentials from kwargs
+    @authenticate(client_id="...", client_secret="...")
+    async def main():
+        ...
+
+    # Use credentials from a JSON file
+    @authenticate(cred_path="...")
+    async def main():
+        ...
+    ```
+    """
+
+    def wrap_coroutine(coro):
+        async def wrapper(*args, **kwargs):
+            global _client
+            if _client is not None:
+                return await coro(*args, **kwargs)
+
+            # Set the global client for the duration of the coroutine
+            try:
+                async with Ensign(*auth_args, **auth_kwargs) as client:
+                    _client = client
+                    res = await coro(*args, **kwargs)
+            except Exception as e:
+                _client = None
+                raise e
+
+            _client = None
+            return res
+
+        return wrapper
+
+    def wrap_async_generator(coro):
+        async def wrapper(*args, **kwargs):
+            global _client
+            if _client is not None:
+                async for res in coro(*args, **kwargs):
+                    yield res
+
+            # Set the global client for the duration of the generator
+            try:
+                async with Ensign(*auth_args, **auth_kwargs) as client:
+                    _client = client
+                    async for res in coro(*args, **kwargs):
+                        yield res
+            except Exception as e:
+                _client = None
+                raise e
+
+            _client = None
+
+        return wrapper
+
+    # Return either a coroutine or an async generator wrapper to match the marked
+    # function
+    def decorator(coro):
+        if inspect.iscoroutinefunction(coro):
+            return wrap_coroutine(coro)
+        elif inspect.isasyncgenfunction(coro):
+            return wrap_async_generator(coro)
+        else:
+            raise TypeError(
+                "decorated function must be a coroutine or async generator, got {}".format(
+                    type(coro)
+                )
+            )
+
+    return decorator
+
+
+def publish(topic, mimetype=None, encoder=None):
+    """
+    Decorator to mark a publish function. The return value of the function will be
+    published as an event to the topic. If the function is a generator, the events are
+    published as they are yielded from the generator. This method assumes that you have
+    already authenticated with Ensign using the `@authenticate` decorator.
+
+    Parameters
+    ----------
+    topic: str
+        The name or ID of the topic to publish events to.
+
+    mimetype: str or int (optional)
+        The mimetype indicating how the return value will be encoded. If not provided,
+        the mimetype is inferred from the return value of the function.
+
+    encoder: events.BytesEncoder (optional)
+        The encoder to use to encode the return value into bytes for the event payload.
+        If not provided, a best effort is made to encode the value, for most data types
+        this will be JSON.
+
+    Usage
+    -----
+    ```
+    # Publish a JSON event to the topic 'my-topic'
+    @publish("my-topic")
+    async def my_function():
+        return {"foo": "bar"}
+
+    # Publish multiple events using a generator
+    @publish("my-topic")
+    async def my_generator():
+        for i in range(3):
+            yield {"event_id": i}
+    ```
+    """
+
+    def wrap_coroutine(coro):
+        async def wrapper(*args, **kwargs):
+            # Create the Ensign client if not already created
+            global _client
+            if _client is None:
+                raise RuntimeError(
+                    "publish requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
+                )
+
+            # Call the function and get the return value
+            val = await coro(*args, **kwargs)
+            if val is None:
+                return val
+
+            # Create the event to publish
+            event = from_object(val, mimetype=mimetype, encoder=encoder)
+
+            # Publish the event
+            await _client.publish(topic, event)
+
+            return val
+
+        return wrapper
+
+    def wrap_async_generator(coro):
+        async def wrapper(*args, **kwargs):
+            # Create the Ensign client if not already created
+            global _client
+            if _client is None:
+                raise RuntimeError(
+                    "publish requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
+                )
+
+            # Yield the values from the generator
+            async for val in coro(*args, **kwargs):
+                if val is None:
+                    yield val
+                    continue
+
+                # Create the event to publish
+                event = from_object(val, mimetype=mimetype, encoder=encoder)
+
+                # Publish the event
+                await _client.publish(topic, event)
+
+                yield val
+
+        return wrapper
+
+    # Return either a coroutine or an async generator wrapper to match the marked
+    # function
+    def decorator(coro):
+        if inspect.iscoroutinefunction(coro):
+            return wrap_coroutine(coro)
+        elif inspect.isasyncgenfunction(coro):
+            return wrap_async_generator(coro)
+        else:
+            raise TypeError(
+                "decorated function must be a coroutine or async generator, got {}".format(
+                    type(coro)
+                )
+            )
+
+    return decorator

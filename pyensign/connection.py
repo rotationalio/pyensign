@@ -118,6 +118,12 @@ class Client:
         else:
             self.client_id = client_id
 
+    async def __aenter__(self):
+        self._ensure_ready()
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close()
+
     def _ensure_ready(self):
         """
         Create the gRPC channel and stub if not already connected. This is done at call
@@ -314,7 +320,8 @@ class Client:
         """
         Close the connection to the server and all ongoing streams.
         """
-        await self.channel.close()
+        if self.channel:
+            await self.channel.close()
         await self._close_streams()
         self.channel = None
 
