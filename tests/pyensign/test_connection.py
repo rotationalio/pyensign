@@ -60,7 +60,8 @@ def grpc_servicer():
 def client(grpc_addr, grpc_server, auth):
     """
     This defines a client fixture that connects to the mock gRPC service which is
-    listening on grpc_addr.
+    listening on grpc_addr, with reconnect timeouts which are intentionally very short
+    to test reconnect logic.
     TODO: We currently have to include grpc_server here to force pytest to load the
     server fixture which is defined in the pytest-grpc library and start the server,
     need to figure out a better way of handling that.
@@ -74,7 +75,24 @@ def client(grpc_addr, grpc_server, auth):
 
 
 @pytest.fixture()
+def client_reconnect_timeout(grpc_addr, grpc_server, auth):
+    """
+    This defines a client fixture that connects to the mock gRPC service but uses the
+    default reconnect timeout, which should be long enough to cause reconnect timeouts
+    in tests.
+    """
+    return Client(
+        Connection(grpc_addr, insecure=True, auth=auth),
+        topic_cache=Cache(),
+    )
+
+
+@pytest.fixture()
 def client_no_reconnect(grpc_addr, grpc_server, auth):
+    """
+    This defines a client fixture that connects to the mock gRPC service but uses no
+    reconnect timeout to test timeout logic.
+    """
     return Client(
         Connection(grpc_addr, insecure=True, auth=auth),
         topic_cache=Cache(),
@@ -454,6 +472,21 @@ class TestClient:
             while not published:
                 await asyncio.sleep(0.1)
             await client.close()
+
+        asyncio.run(publish())
+
+    def test_publish_cancelled(self, client_reconnect_timeout):
+        """
+        Test that async publish tasks exit gracefully when cancelled. On fail this test
+        will hang. In the real world, we don't want code with PyEnsign in it to hang if
+        the user code has already returned.
+        """
+
+        async def publish():
+            await client_reconnect_timeout.publish(
+                OTTERS_TOPIC,
+                async_iter([Event(data=b"event", mimetype="text/plain")]),
+            )
 
         asyncio.run(publish())
 
