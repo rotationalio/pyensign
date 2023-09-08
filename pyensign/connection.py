@@ -18,7 +18,7 @@ from pyensign.auth.interceptor import (
 )
 from pyensign.stream import Publisher, Subscriber
 from pyensign.exceptions import (
-    CursorNoRows,
+    QueryNoRows,
     EnsignClientClosingError,
 )
 
@@ -353,7 +353,7 @@ class Cursor:
         # Read the first event from the stream, which might raise an exception
         self._result = await self.fetchone()
         if self._result is None:
-            raise CursorNoRows("no rows returned")
+            raise QueryNoRows("no results returned by query")
         return self
 
     async def __aiter__(self):

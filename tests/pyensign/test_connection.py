@@ -25,7 +25,7 @@ from pyensign.exceptions import (
     EnsignTimeoutError,
     AuthenticationError,
     EnsignRPCError,
-    CursorNoRows,
+    QueryNoRows,
 )
 
 
@@ -601,7 +601,7 @@ class TestClient:
     @patch.object(InterceptedUnaryStreamCall, "read")
     async def test_en_sql_no_rows(self, read, client):
         read.side_effect = AioRpcError(StatusCode.CANCELLED, None, None)
-        with pytest.raises(CursorNoRows):
+        with pytest.raises(QueryNoRows):
             await client.en_sql("SELECT * FROM topic")
 
     @pytest.mark.asyncio

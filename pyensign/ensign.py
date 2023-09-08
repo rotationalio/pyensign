@@ -12,8 +12,6 @@ from pyensign.exceptions import (
     CacheMissError,
     UnknownTopicError,
     InvalidQueryError,
-    QueryNoRows,
-    CursorNoRows,
     EnsignInvalidArgument,
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
@@ -316,8 +314,6 @@ class Ensign:
             cursor = await self.client.en_sql(query, params=parameters)
         except EnsignInvalidArgument as e:
             raise InvalidQueryError(e.details)
-        except CursorNoRows:
-            raise QueryNoRows("no results returned by query")
 
         return cursor
 

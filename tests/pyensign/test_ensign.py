@@ -17,7 +17,6 @@ from pyensign.exceptions import (
     UnknownTopicError,
     EnsignInvalidArgument,
     InvalidQueryError,
-    CursorNoRows,
     QueryNoRows,
 )
 from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
@@ -353,7 +352,7 @@ class TestEnsign:
         "raises, exception",
         [
             (EnsignInvalidArgument(None, None, "bad syntax"), InvalidQueryError),
-            (CursorNoRows, QueryNoRows),
+            (QueryNoRows, QueryNoRows),
         ],
     )
     @patch("pyensign.connection.Client.en_sql")
