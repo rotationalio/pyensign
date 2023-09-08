@@ -5,7 +5,9 @@ from datetime import timedelta
 from asyncmock import patch
 
 from ulid import ULID
-from grpc import RpcError
+from grpc import RpcError, StatusCode
+from grpc.aio import AioRpcError
+from grpc.aio._interceptor import InterceptedUnaryStreamCall
 
 from pyensign.events import Event
 from pyensign.utils.topics import Topic
@@ -23,6 +25,7 @@ from pyensign.exceptions import (
     EnsignTimeoutError,
     AuthenticationError,
     EnsignRPCError,
+    QueryNoRows,
 )
 
 
@@ -280,6 +283,23 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
             assert req.WhichOneof("embed") in ("ack", "nack")
 
         yield ensign_pb2.SubscribeReply(close_stream=ensign_pb2.CloseStream())
+
+    @authorize
+    @user_agent
+    def EnSQL(self, request, context):
+        for i in range(3):
+            yield event_pb2.EventWrapper(
+                id=ULID().bytes,
+                event=event_pb2.Event(
+                    data="event {}".format(i).encode(),
+                    type=event_pb2.Type(
+                        name="message",
+                        major_version=1,
+                        minor_version=2,
+                        patch_version=3,
+                    ),
+                ).SerializeToString(),
+            )
 
     @authorize
     @user_agent
@@ -579,6 +599,50 @@ class TestClient:
         assert len(event_ids) == len(events)
         for event in events:
             assert event.acked()
+
+    @pytest.mark.asyncio
+    async def test_en_sql(self, client):
+        # Consume the entire cursor at once
+        cursor = await client.en_sql("SELECT * FROM topic")
+        events = await cursor.fetchall()
+        assert len(events) == 3
+        assert events[0].data == b"event 0"
+        assert events[1].data == b"event 1"
+        assert events[2].data == b"event 2"
+        assert await cursor.fetchone() is None
+
+        # Consume the cursor using fetchone() and fetchmany()
+        cursor = await client.en_sql("SELECT * FROM topic")
+        event = await cursor.fetchone()
+        assert event.data == b"event 0"
+        events = await cursor.fetchmany(3)
+        assert len(events) == 2
+        assert events[0].data == b"event 1"
+        assert events[1].data == b"event 2"
+        assert await cursor.fetchmany(3) == []
+
+        # Iterate over the cursor
+        cursor = await client.en_sql("SELECT * FROM topic")
+        i = 0
+        async for event in cursor:
+            assert event.data == b"event %d" % i
+            i += 1
+        assert i == 3
+        assert await cursor.fetchall() == []
+
+    @pytest.mark.asyncio
+    @patch.object(InterceptedUnaryStreamCall, "read")
+    async def test_en_sql_no_rows(self, read, client):
+        read.side_effect = AioRpcError(StatusCode.CANCELLED, None, None)
+        with pytest.raises(QueryNoRows):
+            await client.en_sql("SELECT * FROM topic")
+
+    @pytest.mark.asyncio
+    @patch.object(InterceptedUnaryStreamCall, "read")
+    async def test_en_sql_invalid_query(self, read, client):
+        read.side_effect = AioRpcError(StatusCode.INVALID_ARGUMENT, None, None)
+        with pytest.raises(EnsignRPCError):
+            await client.en_sql("SELECT * FROM topic")
 
     @pytest.mark.asyncio
     async def test_list_topics(self, client):

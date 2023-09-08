@@ -1,7 +1,8 @@
 import re
 
 import pytest
-from grpc import RpcError, StatusCode
+from grpc import StatusCode
+from grpc.aio import AioRpcError
 
 from pyensign.exceptions import (
     EnsignRPCError,
@@ -84,12 +85,7 @@ async def test_error_decorator(exception, expected, match):
 async def test_rpc_meta(code, details):
     @catch_rpc_error
     def fn():
-        # Note: It's not possible to create a RpcError with the code and detatils
-        # directly so this is a hack
-        e = RpcError()
-        e.code = lambda: code
-        e.details = lambda: details
-        raise e
+        raise AioRpcError(code, None, None, details)
 
     match = re.escape(EnsignRPCError(code.name, code.value, details).__str__())
     with pytest.raises(EnsignRPCError, match=match) as exc_info:

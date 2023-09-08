@@ -4,17 +4,21 @@ from ulid import ULID
 from grpc import aio
 from datetime import timedelta
 
+from pyensign.events import from_proto
 from pyensign.version import user_agent
 from pyensign.utils.tasks import WorkerPool
+from pyensign.api.v1beta1.event import unwrap
 from pyensign.exceptions import catch_rpc_error
 from pyensign.api.v1beta1 import ensign_pb2_grpc
 from pyensign.api.v1beta1 import topic_pb2, ensign_pb2, query_pb2
 from pyensign.auth.interceptor import (
     MetadataUnaryInterceptor,
+    MetadataUnaryStreamInterceptor,
     MetadataStreamInterceptor,
 )
 from pyensign.stream import Publisher, Subscriber
 from pyensign.exceptions import (
+    QueryNoRows,
     EnsignClientClosingError,
 )
 
@@ -58,6 +62,7 @@ class Connection:
         if self.auth is not None:
             creds_fn = self.auth.credentials
             interceptors.append(MetadataUnaryInterceptor(creds_fn))
+            interceptors.append(MetadataUnaryStreamInterceptor(creds_fn))
             interceptors.append(MetadataStreamInterceptor(creds_fn))
 
         # Add the user agent to the options
@@ -228,11 +233,10 @@ class Client:
             yield event
 
     @catch_rpc_error
-    async def en_sql(self, query="", params=None):
+    async def en_sql(self, query, params=None):
         self._ensure_ready()
         req = query_pb2.Query(query=query, params=params)
-        async for event in self.stub.EnSQL(req):
-            yield event
+        return await Cursor.execute(self.stub.EnSQL(req))
 
     @catch_rpc_error
     async def explain(self, query="", params=None):
@@ -332,3 +336,104 @@ class Client:
             await subscriber.close()
 
         await self.pool.release()
+
+
+class Cursor:
+    """
+    Cursor defines an abstraction for server-side event streaming using familiar
+    database cursor semantics.
+    """
+
+    @classmethod
+    async def execute(cls, stream):
+        self = Cursor()
+        self._stream = stream
+        self._result = None
+
+        # Read the first event from the stream, which might raise an exception
+        self._result = await self.fetchone()
+        if self._result is None:
+            raise QueryNoRows("no results returned by query")
+        return self
+
+    async def __aiter__(self):
+        while True:
+            event = await self.fetchone()
+            if event is None:
+                return
+            yield event
+
+    async def fetchone(self):
+        """
+        Fetch the next event from the stream. Returns None if there are no more events.
+        """
+        return await self._read()
+
+    async def fetchmany(self, n):
+        """
+        Fetch the next n events from the stream. Returns an empty list if there are no
+        more events.
+        """
+        events = []
+        for _ in range(n):
+            event = await self._read()
+            if event is None:
+                break
+            events.append(event)
+        return events
+
+    async def fetchall(self):
+        """
+        Fetch all events from the stream. Returns an empty list if there are no more
+        events.
+        """
+        events = []
+        while True:
+            event = await self._read()
+            if event is None:
+                break
+            events.append(event)
+        return events
+
+    def close(self):
+        """
+        Close the cursor and the underlying stream.
+        """
+        if self._stream is not None:
+            self._stream.cancel()
+            self._stream = None
+
+    async def _read(self):
+        """
+        Read the next event on the stream, handling gRPC errors and the end of the
+        stream.
+        """
+        if self._stream is None:
+            return None
+
+        # Return the cached result if there is one
+        if self._result is not None:
+            result = self._result
+            self._result = None
+            return result
+
+        # Read the next event from the stream
+        try:
+            event = await self._stream.read()
+        except grpc.aio.AioRpcError as e:
+            self.close()
+            if e.code() == grpc.StatusCode.CANCELLED:
+                return None
+            else:
+                raise e
+        except (asyncio.CancelledError, StopAsyncIteration):
+            self.close()
+            return None
+
+        # Handle unexpected end of stream
+        if event is grpc.aio.EOF:
+            self.close()
+            return None
+
+        # Convert the event to the user-facing type
+        return from_proto(unwrap(event))
