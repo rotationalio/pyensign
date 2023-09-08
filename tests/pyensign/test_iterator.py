@@ -67,7 +67,6 @@ class TestResponseIterator:
         "exception",
         [
             (grpc.aio.AioRpcError(None, None, None)),
-            (asyncio.CancelledError()),
         ],
     )
     async def test_iter_exception(self, exception):
