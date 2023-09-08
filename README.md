@@ -89,6 +89,46 @@ Event:
 
 The `Event` object contains coroutines for acking and nacking an event back to the Ensign service. Subscribers should normally invoke `Event.ack()` once the event has been successfully consumed, or `Event.nack()` if the event needs to be redelivered.
 
+## Decorators
+
+PyEnsign has decorators to quickly add pub/sub to your async functions. For example, if you have a common function that you use to retrieve weather data, you could mark it with `@publish` to automatically publish the returned object to Ensign.
+
+```python
+from pyensign.ensign import authenticate, publish
+
+@authenticate()
+@publish("weather")
+async def current_weather():
+    return {
+        "temp": 72,
+        "units": "fahrenheit"
+    }
+```
+
+is equivalent to
+
+```python
+from pyensign.ensign import Ensign
+
+client = Ensign()
+event = Event(b'{"temp": 72, "units": "fahrenheit"}', "application/json")
+await client.publish("weather", event)
+```
+
+You can also specify an alternative mimetype for the byte encoding. For example, pickle is a common serialization format that's an alternative to JSON.
+
+```python
+@publish("weather", mimetype="application/python-pickle")
+```
+
+`@authenticate` should be specified at least once, usually on your `main` function or at the entry point of your application. By default it uses credentials from your environment, but you can also specify them directly or load them from a JSON file.
+
+```python
+@authenticate(client_id="my-client-id", client_secret="my-client_secret")
+
+@authenticate(cred_path="my-project-credentials.json")
+```
+
 ### Design patterns
 
 Most event-driven applications require some form of concurrency. Therefore, the `Ensign` class is designed to be used asynchronously by defining coroutines. You can use Python's builtin `asyncio` package to schedule and run coroutines from the main thread.

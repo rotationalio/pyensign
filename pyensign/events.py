@@ -1,5 +1,7 @@
 import re
+import json
 import time
+import pickle
 from enum import Enum
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -319,6 +321,55 @@ class EventState(Enum):
     ACKED = 3
     # Event has been nacked by a user or the server
     NACKED = 4
+
+
+def from_object(obj, mimetype=None, encoder=None):
+    """
+    Makes a best effort attempt to convert a Python object into an Event. If an encoder is provided, it will be used to encode the object to bytes. If no encoder
+    is provided, the object will be encoded according to its type or mimetype.
+
+    Parameters
+    ----------
+    obj : object
+        The object to convert into an Event.
+
+    mimetype : str or int (optional)
+        The mimetype of the object. If not provided, the mimetype will be inferred from
+        the object type.
+
+    encoder : class (optional)
+        An encoder with an `encode()` method that encodes the object into bytes. If not
+        provided, the object will be encoded according to its type or the provided
+        mimetype.
+    """
+
+    if mimetype:
+        mimetype = mtype.parse(mimetype)
+
+    if encoder:
+        # Use the provided encoder to encode the object
+        if not mimetype:
+            raise ValueError("mimetype must be provided if encoder is provided")
+        if not hasattr(encoder, "encode"):
+            raise ValueError("encoder must have an encode() method")
+        data = encoder.encode(obj)
+    elif isinstance(obj, bytes):
+        data = obj
+        if not mimetype:
+            mimetype = mtype.ApplicationOctetStream
+    elif isinstance(obj, str):
+        data = obj.encode("utf-8")
+        if not mimetype:
+            mimetype = mtype.TextPlain
+    elif mimetype == mtype.ApplicationPythonPickle:
+        data = pickle.dumps(obj)
+    else:
+        # Default case: assume the object is JSON serializable
+        data = json.dumps(obj).encode("utf-8")
+        if not mimetype:
+            mimetype = mtype.ApplicationJSON
+
+    return Event(data=data, mimetype=mimetype)
 
 
 def from_proto(proto):
