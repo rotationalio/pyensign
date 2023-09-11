@@ -34,6 +34,13 @@ await client.publish("weather", event1, event2)
 await client.publish("weather", [event1, event2])
 ```
 
+Publish is asynchronous, so one-off scripts should wait for the events to be acked by the server before exiting to ensure that the publish happened.
+
+```python
+ack = await event.wait_for_ack()
+print(ack)
+```
+
 Subscribe to one or more topics by providing the topic name(s) or ID(s).
 
 ```python
