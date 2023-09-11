@@ -8,6 +8,7 @@ from unittest import mock
 from asyncmock import patch
 
 from pyensign.ensign import Ensign, authenticate, publish
+from pyensign.status import ServerStatus
 from pyensign.events import Event
 from pyensign.connection import Cursor
 from pyensign.utils.topics import Topic
@@ -500,7 +501,9 @@ class TestEnsign:
     async def test_status(self, mock_status, ensign):
         mock_status.return_value = ("AVAILABLE", "1.0.0", "10 minutes", "", "")
         status = await ensign.status()
-        assert status == "status: AVAILABLE\nversion: 1.0.0\nuptime: 10 minutes"
+        assert status.status == "AVAILABLE"
+        assert status.version == "1.0.0"
+        assert status.uptime == "10 minutes"
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.subscribe")
