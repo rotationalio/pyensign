@@ -48,9 +48,6 @@ class ResponseIterator:
                 rep = await self.stream.read()
             except grpc.aio.AioRpcError:
                 break
-            except asyncio.CancelledError:
-                # If the channel is closed, gRPC cancels the task
-                break
             # Handle unexpected end of stream
             if rep is grpc.aio.EOF:
                 break

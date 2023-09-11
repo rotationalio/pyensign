@@ -5,7 +5,9 @@ from datetime import timedelta
 from asyncmock import patch
 
 from ulid import ULID
-from grpc import RpcError
+from grpc import RpcError, StatusCode
+from grpc.aio import AioRpcError
+from grpc.aio._interceptor import InterceptedUnaryStreamCall
 
 from pyensign.events import Event
 from pyensign.utils.topics import Topic
@@ -23,6 +25,7 @@ from pyensign.exceptions import (
     EnsignTimeoutError,
     AuthenticationError,
     EnsignRPCError,
+    QueryNoRows,
 )
 
 
@@ -57,7 +60,8 @@ def grpc_servicer():
 def client(grpc_addr, grpc_server, auth):
     """
     This defines a client fixture that connects to the mock gRPC service which is
-    listening on grpc_addr.
+    listening on grpc_addr, with reconnect timeouts which are intentionally very short
+    to test reconnect logic.
     TODO: We currently have to include grpc_server here to force pytest to load the
     server fixture which is defined in the pytest-grpc library and start the server,
     need to figure out a better way of handling that.
@@ -71,7 +75,24 @@ def client(grpc_addr, grpc_server, auth):
 
 
 @pytest.fixture()
+def client_reconnect_timeout(grpc_addr, grpc_server, auth):
+    """
+    This defines a client fixture that connects to the mock gRPC service but uses the
+    default reconnect timeout, which should be long enough to cause reconnect timeouts
+    in tests.
+    """
+    return Client(
+        Connection(grpc_addr, insecure=True, auth=auth),
+        topic_cache=Cache(),
+    )
+
+
+@pytest.fixture()
 def client_no_reconnect(grpc_addr, grpc_server, auth):
+    """
+    This defines a client fixture that connects to the mock gRPC service but uses no
+    reconnect timeout to test timeout logic.
+    """
     return Client(
         Connection(grpc_addr, insecure=True, auth=auth),
         topic_cache=Cache(),
@@ -265,6 +286,23 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
 
     @authorize
     @user_agent
+    def EnSQL(self, request, context):
+        for i in range(3):
+            yield event_pb2.EventWrapper(
+                id=ULID().bytes,
+                event=event_pb2.Event(
+                    data="event {}".format(i).encode(),
+                    type=event_pb2.Type(
+                        name="message",
+                        major_version=1,
+                        minor_version=2,
+                        patch_version=3,
+                    ),
+                ).SerializeToString(),
+            )
+
+    @authorize
+    @user_agent
     def ListTopics(self, request, context):
         topics = [
             topic_pb2.Topic(name="expresso"),
@@ -437,6 +475,21 @@ class TestClient:
 
         asyncio.run(publish())
 
+    def test_publish_cancelled(self, client_reconnect_timeout):
+        """
+        Test that async publish tasks exit gracefully when cancelled. On fail this test
+        will hang. In the real world, we don't want code with PyEnsign in it to hang if
+        the user code has already returned.
+        """
+
+        async def publish():
+            await client_reconnect_timeout.publish(
+                OTTERS_TOPIC,
+                async_iter([Event(data=b"event", mimetype="text/plain")]),
+            )
+
+        asyncio.run(publish())
+
     @pytest.mark.asyncio
     async def test_subscribe(self, client):
         topic_ids = [str(ULID()), str(ULID())]
@@ -546,6 +599,50 @@ class TestClient:
         assert len(event_ids) == len(events)
         for event in events:
             assert event.acked()
+
+    @pytest.mark.asyncio
+    async def test_en_sql(self, client):
+        # Consume the entire cursor at once
+        cursor = await client.en_sql("SELECT * FROM topic")
+        events = await cursor.fetchall()
+        assert len(events) == 3
+        assert events[0].data == b"event 0"
+        assert events[1].data == b"event 1"
+        assert events[2].data == b"event 2"
+        assert await cursor.fetchone() is None
+
+        # Consume the cursor using fetchone() and fetchmany()
+        cursor = await client.en_sql("SELECT * FROM topic")
+        event = await cursor.fetchone()
+        assert event.data == b"event 0"
+        events = await cursor.fetchmany(3)
+        assert len(events) == 2
+        assert events[0].data == b"event 1"
+        assert events[1].data == b"event 2"
+        assert await cursor.fetchmany(3) == []
+
+        # Iterate over the cursor
+        cursor = await client.en_sql("SELECT * FROM topic")
+        i = 0
+        async for event in cursor:
+            assert event.data == b"event %d" % i
+            i += 1
+        assert i == 3
+        assert await cursor.fetchall() == []
+
+    @pytest.mark.asyncio
+    @patch.object(InterceptedUnaryStreamCall, "read")
+    async def test_en_sql_no_rows(self, read, client):
+        read.side_effect = AioRpcError(StatusCode.CANCELLED, None, None)
+        with pytest.raises(QueryNoRows):
+            await client.en_sql("SELECT * FROM topic")
+
+    @pytest.mark.asyncio
+    @patch.object(InterceptedUnaryStreamCall, "read")
+    async def test_en_sql_invalid_query(self, read, client):
+        read.side_effect = AioRpcError(StatusCode.INVALID_ARGUMENT, None, None)
+        with pytest.raises(EnsignRPCError):
+            await client.en_sql("SELECT * FROM topic")
 
     @pytest.mark.asyncio
     async def test_list_topics(self, client):

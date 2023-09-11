@@ -1,12 +1,16 @@
 import os
+import json
+import pickle
 import pytest
 import asyncio
 from ulid import ULID
 from unittest import mock
 from asyncmock import patch
 
-from pyensign.ensign import Ensign
+from pyensign.ensign import Ensign, authenticate, publish
+from pyensign.status import ServerStatus
 from pyensign.events import Event
+from pyensign.connection import Cursor
 from pyensign.utils.topics import Topic
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import topic_pb2
@@ -14,6 +18,9 @@ from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
     UnknownTopicError,
+    EnsignInvalidArgument,
+    InvalidQueryError,
+    QueryNoRows,
 )
 from pyensign.mimetype.v1beta1.mimetype_pb2 import MIME
 
@@ -39,8 +46,17 @@ def ensignserver():
 
 
 @pytest.fixture
-def ensign():
-    return Ensign(client_id="id", client_secret="secret", endpoint="localhost:1234")
+def ensign_args():
+    return {
+        "client_id": "id",
+        "client_secret": "secret",
+        "endpoint": "localhost:1234",
+    }
+
+
+@pytest.fixture
+def ensign(ensign_args):
+    return Ensign(**ensign_args)
 
 
 @pytest.fixture()
@@ -259,11 +275,235 @@ class TestEnsign:
         assert args[0].id is None
 
     @pytest.mark.asyncio
+    async def test_auth_decorator(self):
+        """
+        Test using the auth decorator to mark an async function.
+        """
+
+        @authenticate()
+        async def marked_fn():
+            return True
+
+        with mock.patch.dict(
+            os.environ,
+            {"ENSIGN_CLIENT_ID": "client_id", "ENSIGN_CLIENT_SECRET": "client_secret"},
+        ):
+            await marked_fn()
+
+    @pytest.mark.asyncio
+    async def test_auth_decorator_args(self):
+        @authenticate(client_id="client_id", client_secret="client_secret")
+        async def marked_fn():
+            return True
+
+        await marked_fn()
+
+    @pytest.mark.asyncio
+    async def test_auth_decorator_generator(self):
+        """
+        Test using the auth decorator to mark an async generator function.
+        """
+
+        @authenticate()
+        async def marked_fn():
+            yield True
+
+        with mock.patch.dict(
+            os.environ,
+            {"ENSIGN_CLIENT_ID": "client_id", "ENSIGN_CLIENT_SECRET": "client_secret"},
+        ):
+            async for _ in marked_fn():
+                pass
+
+    @pytest.mark.asyncio
+    async def test_auth_decorator_wrong_type(self):
+        """
+        Test cannot use the auth decorator on a non-async function.
+        """
+
+        with pytest.raises(TypeError):
+
+            @authenticate()
+            def marked_fn():
+                return True
+
+            marked_fn()
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.publish")
+    @pytest.mark.parametrize(
+        "obj, mimetype, expected_data, expected_mimetype",
+        [
+            (
+                {"name": "Enson"},
+                None,
+                b'{"name": "Enson"}',
+                MIME.APPLICATION_JSON,
+            ),
+            (
+                {"name": "Enson"},
+                "application/json",
+                b'{"name": "Enson"}',
+                MIME.APPLICATION_JSON,
+            ),
+            (
+                "Enson",
+                None,
+                b"Enson",
+                MIME.TEXT_PLAIN,
+            ),
+            (
+                b"Enson",
+                "text/plain",
+                b"Enson",
+                MIME.TEXT_PLAIN,
+            ),
+            (
+                {"name": "Enson"},
+                "application/python-pickle",
+                pickle.dumps({"name": "Enson"}),
+                MIME.APPLICATION_PYTHON_PICKLE,
+            ),
+        ],
+    )
+    async def test_publish_decorator(
+        self,
+        mock_publish,
+        ensign_args,
+        obj,
+        mimetype,
+        expected_data,
+        expected_mimetype,
+    ):
+        @authenticate(**ensign_args)
+        @publish("otters", mimetype=mimetype)
+        async def marked_fn(obj):
+            return obj
+
+        # Invoke the marked async function
+        val = await marked_fn(obj)
+        assert val == obj
+
+        # Should have called publish with the correct topic and event
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], Topic)
+        assert args[0].name == "otters"
+
+        async for event in args[1]:
+            assert isinstance(event, Event)
+            assert event.data == expected_data
+            assert event.mimetype == expected_mimetype
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.publish")
+    async def test_publish_decorator_encoder(self, mock_publish, ensign_args):
+        """
+        Test the publish decorator with a custom encoder.
+        """
+
+        class CustomJSONEncoder:
+            def encode(self, obj):
+                return json.dumps(obj, indent=2).encode("utf-8")
+
+        @authenticate(**ensign_args)
+        @publish("otters", mimetype="application/json", encoder=CustomJSONEncoder())
+        async def marked_fn(obj):
+            return obj
+
+        # Invoke the marked async function
+        val = await marked_fn({"name": "Enson"})
+        assert val == {"name": "Enson"}
+
+        # Should have called publish with the correct topic and event
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], Topic)
+        assert args[0].name == "otters"
+
+        async for event in args[1]:
+            assert isinstance(event, Event)
+            assert event.data == b'{\n  "name": "Enson"\n}'
+            assert event.mimetype == MIME.APPLICATION_JSON
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.publish")
+    async def test_publish_decorator_generator(self, mock_publish, ensign_args):
+        """
+        Test marking a generator function with the publish decorator.
+        """
+
+        @authenticate(**ensign_args)
+        @publish("otters", mimetype="application/json")
+        async def marked_fn(objects):
+            for obj in objects:
+                yield obj
+
+        # Invoke the marked async function
+        objects = [{"name": "Enson"}, {"name": "Otto"}]
+        i = 0
+        async for val in marked_fn(objects):
+            assert val == objects[i]
+            args, _ = mock_publish.call_args
+            assert isinstance(args[0], Topic)
+            assert args[0].name == "otters"
+            async for event in args[1]:
+                assert isinstance(event, Event)
+                assert event.data == json.dumps(objects[i]).encode("utf-8")
+                assert event.mimetype == MIME.APPLICATION_JSON
+            i += 1
+
+    @pytest.mark.asyncio
+    async def test_publish_decorator_no_auth(self):
+        """
+        Should raise an exception if the publish decorator is used without authenticate
+        being called.
+        """
+
+        @publish("otters", mimetype="application/json")
+        async def marked_fn(obj):
+            return obj
+
+        # Invoke the marked async function
+        with pytest.raises(RuntimeError):
+            await marked_fn(None)
+
+    @pytest.mark.asyncio
+    async def test_publish_decorator_error(self, ensign_args):
+        """
+        Publish errors should be raised from the decorator.
+        """
+
+        @authenticate(**ensign_args)
+        @publish("")
+        async def marked_fn(obj):
+            return obj
+
+        # No topic provided should be a ValueError
+        with pytest.raises(ValueError):
+            await marked_fn("obj")
+
+    @pytest.mark.asyncio
+    async def test_publish_decorator_wrong_type(self):
+        """
+        Test cannot use the publish decorator on a non-async function.
+        """
+
+        with pytest.raises(TypeError):
+
+            @authenticate()
+            @publish("otters")
+            def marked_fn():
+                return True
+
+            marked_fn()
+
+    @pytest.mark.asyncio
     @patch("pyensign.connection.Client.status")
     async def test_status(self, mock_status, ensign):
         mock_status.return_value = ("AVAILABLE", "1.0.0", "10 minutes", "", "")
         status = await ensign.status()
-        assert status == "status: AVAILABLE\nversion: 1.0.0\nuptime: 10 minutes"
+        assert status.status == "AVAILABLE"
+        assert status.version == "1.0.0"
+        assert status.uptime == "10 minutes"
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.subscribe")
@@ -334,6 +574,54 @@ class TestEnsign:
         args, _ = mock_subscribe.call_args
         for id in args[0]:
             assert isinstance(ULID.from_str(id), ULID)
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.en_sql")
+    async def test_query(self, mock_en_sql, ensign):
+        mock_en_sql.return_value = Cursor()
+        cursor = await ensign.query("SELECT * FROM otters")
+        mock_en_sql.assert_called_once_with("SELECT * FROM otters", params=[])
+        assert isinstance(cursor, Cursor)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "raises, exception",
+        [
+            (EnsignInvalidArgument(None, None, "bad syntax"), InvalidQueryError),
+            (QueryNoRows, QueryNoRows),
+        ],
+    )
+    @patch("pyensign.connection.Client.en_sql")
+    async def test_query_error(self, mock_en_sql, raises, exception, ensign):
+        mock_en_sql.side_effect = raises
+        with pytest.raises(exception):
+            await ensign.query("SELECT * FROM otters")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "params, exception",
+        [
+            ({}, None),
+            ({"foo": 1}, None),
+            ({"foo": 2.3}, None),
+            ({"foo": True}, None),
+            ({"foo": b"data"}, None),
+            ({"foo": "bar"}, None),
+            ({"foo": "bar", "bar": 2}, None),
+            ({"foo": None}, TypeError),
+            ({"foo": [1, 2, 3]}, TypeError),
+            ({"foo": {"bar": 1}}, TypeError),
+        ],
+    )
+    @patch("pyensign.connection.Client.en_sql")
+    async def test_query_params(self, mock_en_sql, params, exception, ensign):
+        mock_en_sql.return_value = Cursor()
+        if exception:
+            with pytest.raises(exception):
+                await ensign.query("SELECT * FROM otters", params=params)
+        else:
+            cursor = await ensign.query("SELECT * FROM otters", params=params)
+            assert isinstance(cursor, Cursor)
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")

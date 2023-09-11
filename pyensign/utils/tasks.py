@@ -28,7 +28,9 @@ class WorkerPool:
                 await coro
                 if done_callback:
                     done_callback()
-            except asyncio.QueueEmpty:
+            except (asyncio.QueueEmpty, asyncio.CancelledError):
+                # If there is nothing to be done or someone cancelled us, stop the
+                # worker
                 break
         self.workers.remove(asyncio.current_task())
 

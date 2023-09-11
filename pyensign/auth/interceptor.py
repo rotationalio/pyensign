@@ -43,6 +43,20 @@ class MetadataUnaryInterceptor(MetadataInterceptor, aio.UnaryUnaryClientIntercep
         return await continuation(client_call_details, request)
 
 
+class MetadataUnaryStreamInterceptor(
+    MetadataInterceptor, aio.UnaryStreamClientInterceptor
+):
+    async def intercept_unary_stream(self, continuation, client_call_details, request):
+        """
+        Intercepts a unary-stream call to add a metadata tuple.
+        """
+
+        client_call_details = client_call_details._replace(
+            metadata=self.get_metadata(client_call_details)
+        )
+        return await continuation(client_call_details, request)
+
+
 class MetadataStreamInterceptor(MetadataInterceptor, aio.StreamStreamClientInterceptor):
     async def intercept_stream_stream(
         self, continuation, client_call_details, request_iterator
