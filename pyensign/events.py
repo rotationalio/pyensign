@@ -2,13 +2,15 @@ import re
 import json
 import time
 import pickle
+import asyncio
 from enum import Enum
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from pyensign.ack import Ack
 from pyensign.utils import pbtime
 from pyensign import mimetypes as mtype
 from pyensign.api.v1beta1 import ensign_pb2, event_pb2
-from pyensign.exceptions import AckError, NackError
+from pyensign.exceptions import CouldNotAck, CouldNotNack, NackError
 
 
 class Event:
@@ -131,7 +133,7 @@ class Event:
 
         Raises
         ------
-        AckError
+        CouldNotAck
             If the Event was not received by a subscriber.
         """
 
@@ -142,7 +144,7 @@ class Event:
         elif (
             self._state == EventState.INITIALIZED or self._state == EventState.PUBLISHED
         ):
-            raise AckError("Event has not been received by a subscriber")
+            raise CouldNotAck("Event has not been received by a subscriber")
 
         await self._stream.write_request(
             ensign_pb2.SubscribeRequest(ack=ensign_pb2.Ack(id=self.id))
@@ -171,7 +173,7 @@ class Event:
 
         Raises
         ------
-        NackError
+        CouldNotNack
             If the Event was not received by a subscriber.
         """
 
@@ -182,13 +184,27 @@ class Event:
         elif (
             self._state == EventState.INITIALIZED or self._state == EventState.PUBLISHED
         ):
-            raise NackError("Event has not been received by a subscriber")
+            raise CouldNotNack("Event has not been received by a subscriber")
 
         await self._stream.write_request(
             ensign_pb2.SubscribeRequest(nack=ensign_pb2.Nack(id=self.id, code=code))
         )
         self._state = EventState.NACKED
         return True
+
+    async def wait_for_ack(self):
+        """
+        Wait for the event to be acked or nacked. If the event was acked this returns
+        the ack. If the event was nacked this raises a NackError.
+        """
+
+        while not self.acked() and not self.nacked():
+            await asyncio.sleep(0.1)
+
+        if self.nacked():
+            raise NackError(self.error.code, self.error.error)
+
+        return Ack(self.id, self.committed)
 
     def mark_published(self):
         self._state = EventState.PUBLISHED

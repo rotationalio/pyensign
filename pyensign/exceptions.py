@@ -167,7 +167,7 @@ class UnknownTopicError(PyEnsignError, TopicNotFoundError):
     pass
 
 
-class AckError(PyEnsignError):
+class CouldNotAck(PyEnsignError):
     """
     Raised when PyEnsign could not ack an event
     """
@@ -175,10 +175,26 @@ class AckError(PyEnsignError):
     pass
 
 
-class NackError(PyEnsignError):
+class CouldNotNack(PyEnsignError):
     """
     Raised when PyEnsign could not nack an event
     """
+
+    pass
+
+
+class NackError(PyEnsignError):
+    """
+    Nack errors returned to the user
+    TODO: Handle error codes
+    """
+
+    def __init__(self, code, error):
+        self.code = code
+        self.error = error
+
+    def __str__(self):
+        return "event was nacked: {} ({})".format(self.error, self.code)
 
     pass
 
