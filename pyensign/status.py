@@ -1,6 +1,4 @@
-
 class ServerStatus(object):
-
     def __init__(self, status, version, uptime):
         # TODO: convert status enum integer into string
         # TODO: convert uptime into a timedelta
