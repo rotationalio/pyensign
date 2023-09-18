@@ -197,9 +197,7 @@ class Client:
         await self.pool.schedule(publisher.queue_events(events))
 
     @catch_rpc_error
-    async def subscribe(self, topics, query="", consumer_group=None):
-        # TODO: Support query parameters
-
+    async def subscribe(self, topics, query=None, consumer_group=None):
         # Ensure we have a gRPC channel
         self._ensure_ready()
 
@@ -217,7 +215,7 @@ class Client:
             subscriber = Subscriber(
                 self,
                 topics,
-                query=query_pb2.Query(query=query),
+                query=query,
                 consumer_group=consumer_group,
                 reconnect_tick=self.reconnect_tick,
                 reconnect_timeout=self.reconnect_timeout,
@@ -239,10 +237,9 @@ class Client:
             yield event
 
     @catch_rpc_error
-    async def en_sql(self, query, params=None):
+    async def en_sql(self, query):
         self._ensure_ready()
-        req = query_pb2.Query(query=query, params=params)
-        return await Cursor.execute(self.stub.EnSQL(req))
+        return await Cursor.execute(self.stub.EnSQL(query))
 
     @catch_rpc_error
     async def explain(self, query="", params=None):
