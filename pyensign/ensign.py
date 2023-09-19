@@ -655,9 +655,9 @@ def authenticate(*auth_args, **auth_kwargs):
     return decorator
 
 
-def publish(topic, mimetype=None, encoder=None):
+def publisher(topic, mimetype=None, encoder=None):
     """
-    Decorator to mark a publish function. The return value of the function will be
+    Decorator to mark a publisher function. The return value of the function will be
     published as an event to the topic. If the function is a generator, the events are
     published as they are yielded from the generator. This method assumes that you have
     already authenticated with Ensign using the `@authenticate` decorator.
@@ -680,12 +680,12 @@ def publish(topic, mimetype=None, encoder=None):
     -----
     ```
     # Publish a JSON event to the topic 'my-topic'
-    @publish("my-topic")
+    @publisher("my-topic")
     async def my_function():
         return {"foo": "bar"}
 
     # Publish multiple events using a generator
-    @publish("my-topic")
+    @publisher("my-topic")
     async def my_generator():
         for i in range(3):
             yield {"event_id": i}
@@ -738,6 +738,83 @@ def publish(topic, mimetype=None, encoder=None):
                 await _client.publish(topic, event)
 
                 yield val
+
+        return wrapper
+
+    # Return either a coroutine or an async generator wrapper to match the marked
+    # function
+    def decorator(coro):
+        if inspect.iscoroutinefunction(coro):
+            return wrap_coroutine(coro)
+        elif inspect.isasyncgenfunction(coro):
+            return wrap_async_generator(coro)
+        else:
+            raise TypeError(
+                "decorated function must be a coroutine or async generator, got {}".format(
+                    type(coro)
+                )
+            )
+
+    return decorator
+
+
+def subscriber(*topics):
+    """
+    Decorator to mark a subscriber function. If the function is a coroutine, the events
+    are passed to the function as an async generator. If the function is itself an
+    async generator, then it's invoked for each event received on the topic. This
+    method assumes that you have already authenticated with Ensign using the
+    `@authenticate` decorator.
+
+    Parameters
+    ----------
+    *topics : iterable of str
+        The topic names or IDs to consume events from.
+
+    Usage
+    -----
+    ```
+    # Subscribe to the topic 'my-topic'
+    @subscriber("my-topic")
+    async def process_events(events):
+        async for event in events:
+            # Process the event
+
+    # Subscribe using a generator
+    @subscriber("my-topic")
+    async def process_events(event):
+        # Process the event and yield to the caller
+        yield result
+    """
+
+    def wrap_coroutine(coro):
+        async def wrapper(*args, **kwargs):
+            # Create the Ensign client if not already created
+            global _client
+            if _client is None:
+                raise RuntimeError(
+                    "subscriber requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
+                )
+
+            # Subscribe to the topic and pass the generator to the coroutine
+            events = _client.subscribe(topics)
+            await coro(events, *args, **kwargs)
+
+        return wrapper
+
+    def wrap_async_generator(coro):
+        async def wrapper(*args, **kwargs):
+            # Create the Ensign client if not already created
+            global _client
+            if _client is None:
+                raise RuntimeError(
+                    "subscriber requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
+                )
+
+            # Subscribe to the topic and pass each event to the coroutine
+            async for event in _client.subscribe(topics):
+                async for res in coro(event, *args, **kwargs):
+                    yield res
 
         return wrapper
 
