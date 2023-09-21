@@ -7,6 +7,7 @@ from ulid import ULID
 from pyensign.connection import Client
 from pyensign.events import from_object
 from pyensign.status import ServerStatus
+from pyensign.api.v1beta1.query import format_query
 from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2, query_pb2
@@ -187,7 +188,7 @@ class Ensign:
             on_nack=on_nack,
         )
 
-    async def subscribe(self, *topics, query="", consumer_group=None):
+    async def subscribe(self, *topics, query="", params=None, consumer_group=None):
         """
         Subscribe to events from the Ensign server. This method returns an async
         generator that yields Event objects, so the `async for` syntax can be used to
@@ -200,6 +201,11 @@ class Ensign:
 
         query : str (optional)
             EnSQL query to filter events.
+
+        params : dict (optional)
+            If a query is provided, optional parameters to be substituted into the
+            query. Only primitive types are supported, i.e. strings, integers, floats,
+            and booleans.
 
         consumer_group : api.v1beta1.groups.ConsumerGroup (optional)
             The consumer group to use for the subscriber.
@@ -228,6 +234,12 @@ class Ensign:
 
         if len(topics) == 0:
             raise ValueError("no topics provided")
+
+        # Parse the query into the protobuf message
+        if query != "":
+            query = format_query(query, params)
+        else:
+            query = None
 
         # Parse topic names into ID strings
         topic_ids = []
@@ -293,28 +305,9 @@ class Ensign:
             If an unsupported parameter type is provided.
         """
 
-        # Parse the args into the protobuf parameters
-        parameters = []
-        if params:
-            for name, value in params.items():
-                if isinstance(value, int):
-                    parameters.append(query_pb2.Parameter(name=name, i=value))
-                elif isinstance(value, float):
-                    parameters.append(query_pb2.Parameter(name=name, d=value))
-                elif isinstance(value, bool):
-                    parameters.append(query_pb2.Parameter(name=name, b=value))
-                elif isinstance(value, bytes):
-                    parameters.append(query_pb2.Parameter(name=name, y=value))
-                elif isinstance(value, str):
-                    parameters.append(query_pb2.Parameter(name=name, s=value))
-                else:
-                    raise TypeError(
-                        "unsupported parameter type: {}".format(type(value).__name__)
-                    )
-
         # Execute the query and return the cursor to the user
         try:
-            cursor = await self.client.en_sql(query, params=parameters)
+            cursor = await self.client.en_sql(format_query(query, params))
         except EnsignInvalidArgument as e:
             raise InvalidQueryError(e.details)
 

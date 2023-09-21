@@ -1,5 +1,6 @@
+import logging
+
 import grpc
-import asyncio
 
 from pyensign.exceptions import EnsignTypeError
 
@@ -87,13 +88,25 @@ class PublishResponseIterator(ResponseIterator):
                 if event:
                     event.mark_acked(rep.ack)
                     if self.on_ack:
-                        await self.on_ack(rep.ack)
+                        try:
+                            await self.on_ack(rep.ack)
+                        except Exception as e:
+                            logging.warning(
+                                f"unhandled exception while awaiting ack callback: {e}",
+                                exc_info=True,
+                            )
             elif rep_type == "nack":
                 event = self.pending.pop(rep.nack.id, None)
                 if event:
                     event.mark_nacked(rep.nack)
                     if self.on_nack:
-                        await self.on_nack(rep.nack)
+                        try:
+                            await self.on_nack(rep.nack)
+                        except Exception as e:
+                            logging.warning(
+                                f"unhandled exception while awaiting nack callback: {e}",
+                                exc_info=True,
+                            )
             elif rep_type == "close_stream":
                 break
             else:

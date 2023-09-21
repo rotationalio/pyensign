@@ -14,7 +14,7 @@ from pyensign.utils.topics import Topic
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
-from pyensign.api.v1beta1 import topic_pb2
+from pyensign.api.v1beta1 import topic_pb2, query_pb2
 from pyensign.connection import Connection
 from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
@@ -26,6 +26,7 @@ from pyensign.exceptions import (
     AuthenticationError,
     EnsignRPCError,
     QueryNoRows,
+    NackError,
 )
 
 
@@ -233,15 +234,19 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         )
         yield ensign_pb2.PublisherReply(ready=stream_ready)
 
-        for _ in range(3):
+        for i in range(3):
             # Ensure the client is only sending events
             req = next(request_iterator)
             assert isinstance(req, ensign_pb2.PublisherRequest)
             assert req.WhichOneof("embed") == "event"
 
-            # Send back an ack to the client
-            ack = ensign_pb2.Ack(id=req.event.local_id)
-            yield ensign_pb2.PublisherReply(ack=ack)
+            # Alternate acks/nacks to the client for full testability
+            if i % 2 == 0:
+                ack = ensign_pb2.Ack(id=req.event.local_id)
+                yield ensign_pb2.PublisherReply(ack=ack)
+            else:
+                nack = ensign_pb2.Nack(id=req.event.local_id)
+                yield ensign_pb2.PublisherReply(nack=nack)
 
         yield ensign_pb2.PublisherReply(close_stream=ensign_pb2.CloseStream())
 
@@ -377,33 +382,43 @@ class TestClient:
             Event(data=b"event 2", mimetype="text/plain"),
         ]
         ack_ids = []
-        published = asyncio.Event()
+        nack_ids = []
 
         async def source_events(events):
             for event in events:
                 yield event
 
-        async def record_acks(ack):
+        async def on_ack(ack):
             nonlocal ack_ids
             ack_ids.append(ack.id)
-            if len(ack_ids) >= 3:
-                published.set()
 
-        await client.publish(topic, source_events(events), on_ack=record_acks)
+        async def on_nack(nack):
+            nonlocal nack_ids
+            nack_ids.append(nack.id)
+
+        await client.publish(
+            topic, source_events(events), on_ack=on_ack, on_nack=on_nack
+        )
 
         # Should be able to resume publishing to an existing stream.
         more_events = [
             Event(data=b"event 3", mimetype="text/plain"),
         ]
-        await client.publish(topic, source_events(more_events), on_ack=record_acks)
-        await published.wait()
+        await client.publish(
+            topic, source_events(more_events), on_ack=on_ack, on_nack=on_nack
+        )
+
+        # Wait for all the events to be acked or nacked.
+        await events[0].wait_for_ack()
+        assert events[0].acked()
+        with pytest.raises(NackError):
+            await events[1].wait_for_ack()
+        assert events[1].nacked()
+        await more_events[0].wait_for_ack()
+        assert more_events[0].acked()
 
         await client.close()
-        assert len(ack_ids) == len(events) + len(more_events)
-        for event in events:
-            assert event.acked()
-        for event in more_events:
-            assert event.acked()
+        assert len(ack_ids) + len(nack_ids) == len(events) + len(more_events)
 
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
@@ -451,6 +466,35 @@ class TestClient:
         with pytest.raises(UnknownTopicError):
             await client.publish(topic, [])
         await client.close()
+
+    @pytest.mark.asyncio
+    async def test_publish_ack_error(self, caplog, client):
+        """
+        Test when an exception is raised inside an ack handler it is caught and logged.
+        """
+
+        async def on_ack(ack):
+            raise Exception("I could not process this ack", ack)
+
+        async def on_nack(nack):
+            raise Exception("I could not process this nack", nack)
+
+        acked_event = Event(data=b"event", mimetype="text/plain")
+        nacked_event = Event(data=b"event", mimetype="text/plain")
+
+        async def source_events():
+            yield acked_event
+            yield nacked_event
+
+        await client.publish(
+            OTTERS_TOPIC, source_events(), on_ack=on_ack, on_nack=on_nack
+        )
+        await acked_event.wait_for_ack()
+        with pytest.raises(NackError):
+            await nacked_event.wait_for_ack()
+        await client.close()
+        assert "I could not process this ack" in caplog.text
+        assert "I could not process this nack" in caplog.text
 
     def test_publish_sync(self, client):
         """
@@ -519,6 +563,33 @@ class TestClient:
         assert isinstance(id, ULID)
 
     @pytest.mark.asyncio
+    async def test_subscribe_query(self, client):
+        topic_ids = [str(ULID()), str(ULID())]
+        event_ids = []
+
+        # Consume events from the stream.
+        query = query_pb2.Query(
+            query="SELECT * FROM topic",
+            params=[query_pb2.Parameter(name="intparam", i=42)],
+        )
+        async for event in client.subscribe(
+            topic_ids,
+            query=query,
+        ):
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) == 3:
+                break
+
+        # Event IDs should be unique.
+        assert len(event_ids) == len(set(event_ids))
+
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get(OTTERS_TOPIC.name)
+        assert isinstance(id, ULID)
+
+    @pytest.mark.asyncio
     async def test_subscribe_reconnect(self, client):
         topic_ids = [str(ULID()), str(ULID())]
         event_ids = []
@@ -573,17 +644,22 @@ class TestClient:
             Event(data=b"event 3", mimetype="text/plain"),
         ]
         ack_ids = []
+        nack_ids = []
         event_ids = []
 
-        async def record_acks(ack):
+        async def on_ack(ack):
             nonlocal ack_ids
             ack_ids.append(ack.id)
+
+        async def on_nack(nack):
+            nonlocal nack_ids
+            nack_ids.append(nack.id)
 
         async def source_events():
             for event in events:
                 yield event
 
-        await client.publish(topic, source_events(), on_ack=record_acks)
+        await client.publish(topic, source_events(), on_ack=on_ack, on_nack=on_nack)
 
         # Consume all the events
         async for event in client.subscribe(iter(["expresso", "arabica"])):
@@ -595,10 +671,11 @@ class TestClient:
                 break
 
         await client.close()
-        assert len(ack_ids) == len(events)
+        assert len(ack_ids) + len(nack_ids) == len(events)
         assert len(event_ids) == len(events)
-        for event in events:
-            assert event.acked()
+        assert events[0].acked()
+        assert events[1].nacked()
+        assert events[2].acked()
 
     @pytest.mark.asyncio
     async def test_en_sql(self, client):
