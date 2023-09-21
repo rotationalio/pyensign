@@ -91,21 +91,23 @@ The `Event` object contains coroutines for acking and nacking an event back to t
 
 ## Decorators
 
-PyEnsign has decorators to quickly add pub/sub to your async functions. For example, if you have a common function that you use to retrieve weather data, you could mark it with `@publish` to automatically publish the returned object to Ensign.
+PyEnsign has decorators to convert your existing async functions into `publishers` and `subscribers`. For example, if you have a common function that you use to retrieve weather data, you could mark it with `@publisher` to automatically publish the returned object to Ensign.
 
 ```python
-from pyensign.ensign import authenticate, publish
+from pyensign.ensign import authenticate, publisher
 
 @authenticate()
-@publish("weather")
+@publisher("weather")
 async def current_weather():
     return {
         "temp": 72,
         "units": "fahrenheit"
     }
+
+await current_weather()
 ```
 
-is equivalent to
+This is equivalent to:
 
 ```python
 from pyensign.ensign import Ensign
@@ -119,6 +121,35 @@ You can also specify an alternative mimetype for the byte encoding. For example,
 
 ```python
 @publish("weather", mimetype="application/python-pickle")
+```
+
+Similarly you can use `@subscriber` to mark a subscriber which processes the weather data directly from the topic, e.g. to serve up weather updates in real time.
+
+```python
+import json
+from pyensign.ensign import 
+
+@authenticate()
+@subscriber("weather")
+async def process_weather(events):
+    for event in events:
+        update = json.loads(event.data)
+        print(update)
+        await event.ack()
+
+await process_weather()
+```
+
+This is equivalent to:
+
+```python
+from pyensign.ensign import Ensign
+
+client = Ensign()
+async for event in client.subscribe():
+    update = json.loads(event.data)
+    print(update)
+    await event.ack()
 ```
 
 `@authenticate` should be specified at least once, usually on your `main` function or at the entry point of your application. By default it uses credentials from your environment, but you can also specify them directly or load them from a JSON file.
