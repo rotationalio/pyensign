@@ -135,7 +135,7 @@ async def process_weather(events):
     for event in events:
         update = json.loads(event.data)
         print(update)
-        event.ack()
+        await event.ack()
 
 await process_weather()
 ```
@@ -149,7 +149,7 @@ client = Ensign()
 async for event in client.subscribe():
     update = json.loads(event.data)
     print(update)
-    event.ack()
+    await event.ack()
 ```
 
 `@authenticate` should be specified at least once, usually on your `main` function or at the entry point of your application. By default it uses credentials from your environment, but you can also specify them directly or load them from a JSON file.
