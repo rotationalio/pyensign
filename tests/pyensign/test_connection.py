@@ -14,7 +14,7 @@ from pyensign.utils.topics import Topic
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
-from pyensign.api.v1beta1 import topic_pb2
+from pyensign.api.v1beta1 import topic_pb2, query_pb2
 from pyensign.connection import Connection
 from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
@@ -549,6 +549,33 @@ class TestClient:
 
         # Resume consuming events from the stream.
         async for event in client.subscribe(topic_ids):
+            assert isinstance(event, Event)
+            await event.ack()
+            event_ids.append(event.id)
+            if len(event_ids) == 3:
+                break
+
+        # Event IDs should be unique.
+        assert len(event_ids) == len(set(event_ids))
+
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get(OTTERS_TOPIC.name)
+        assert isinstance(id, ULID)
+
+    @pytest.mark.asyncio
+    async def test_subscribe_query(self, client):
+        topic_ids = [str(ULID()), str(ULID())]
+        event_ids = []
+
+        # Consume events from the stream.
+        query = query_pb2.Query(
+            query="SELECT * FROM topic",
+            params=[query_pb2.Parameter(name="intparam", i=42)],
+        )
+        async for event in client.subscribe(
+            topic_ids,
+            query=query,
+        ):
             assert isinstance(event, Event)
             await event.ack()
             event_ids.append(event.id)

@@ -8,12 +8,10 @@ from unittest import mock
 from asyncmock import patch
 
 from pyensign.ensign import Ensign, authenticate, publish
-from pyensign.status import ServerStatus
 from pyensign.events import Event
 from pyensign.connection import Cursor
 from pyensign.utils.topics import Topic
-from pyensign.api.v1beta1 import ensign_pb2
-from pyensign.api.v1beta1 import topic_pb2
+from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2
 from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
@@ -534,21 +532,23 @@ class TestEnsign:
     @patch("pyensign.connection.Client.list_topics")
     @patch("pyensign.connection.Client.topic_exists")
     @pytest.mark.parametrize(
-        "topics, exception",
+        "topics, query, params, exception",
         [
-            ([], ValueError),
-            (111, TypeError),
-            (("otters", 111), TypeError),
+            ([], "", None, ValueError),
+            (111, "", None, TypeError),
+            (("otters", 111), "", None, TypeError),
+            (["otters"], 42, {"foo": "bar"}, TypeError),
+            (["otters"], " SELECT * from foo; ", 42, TypeError),
         ],
     )
     async def test_subscribe_error(
-        self, mock_exists, mock_list, topics, exception, ensign
+        self, mock_exists, mock_list, topics, query, params, exception, ensign
     ):
         ensign.topics.add("otters", ULID())
         mock_exists.return_value = (None, False)
         mock_list.return_value = ([topic_pb2.Topic(name="otters", id=ULID().bytes)], "")
         with pytest.raises(exception):
-            async for _ in ensign.subscribe(topics):
+            async for _ in ensign.subscribe(topics, query=query, params=params):
                 pass
 
     @pytest.mark.asyncio
@@ -580,7 +580,8 @@ class TestEnsign:
     async def test_query(self, mock_en_sql, ensign):
         mock_en_sql.return_value = Cursor()
         cursor = await ensign.query("SELECT * FROM otters")
-        mock_en_sql.assert_called_once_with("SELECT * FROM otters", params=[])
+        expected_query = query_pb2.Query(query="SELECT * FROM otters", params=[])
+        mock_en_sql.assert_called_once_with(expected_query)
         assert isinstance(cursor, Cursor)
 
     @pytest.mark.asyncio
