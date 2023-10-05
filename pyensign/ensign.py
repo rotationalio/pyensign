@@ -404,7 +404,7 @@ class Ensign:
         """
 
         _, state = await self.client.destroy_topic(id)
-        return state == topic_pb2.TopicTombstone.Status.DELETING
+        return state == topic_pb2.TopicState.DELETING
 
     async def topic_names(self):
         raise NotImplementedError

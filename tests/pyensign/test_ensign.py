@@ -765,7 +765,7 @@ class TestEnsign:
     async def test_destroy_topic(self, mock_destroy, ensign):
         mock_destroy.return_value = (
             ULID().bytes,
-            topic_pb2.TopicTombstone.Status.DELETING,
+            topic_pb2.TopicState.DELETING,
         )
         success = await ensign.destroy_topic("otters")
         assert success
@@ -775,7 +775,7 @@ class TestEnsign:
     async def test_destroy_topic_error(self, mock_destroy, ensign):
         mock_destroy.return_value = (
             ULID().bytes,
-            topic_pb2.TopicTombstone.Status.UNKNOWN,
+            topic_pb2.TopicState.UNDEFINED,
         )
         success = await ensign.destroy_topic("otters")
         assert not success

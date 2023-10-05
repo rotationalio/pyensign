@@ -328,7 +328,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     @authorize
     @user_agent
     def DeleteTopic(self, request, context):
-        return topic_pb2.TopicTombstone(id=request.id)
+        return topic_pb2.TopicStatus(id=request.id)
 
     @authorize
     @user_agent
