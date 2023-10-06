@@ -880,9 +880,34 @@ class TestEnsign:
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.set_topic_deduplication_policy")
-    async def test_set_topic_deduplication_policy(self, mock_set_policy, ensign):
+    @pytest.mark.parametrize(
+        "args",
+        [
+            {"strategy": 1},
+            {"strategy": "STRICT"},
+            {"strategy": "unique_key", "keys": ["foo", "bar"]},
+            {"strategy": topic_pb2.Deduplication.DATAGRAM, "offset": 2},
+            {"strategy": topic_pb2.Deduplication.STRICT, "offset": "latest"},
+            {"strategy": "unique_field", "fields": ["foo", "bar"]},
+            {"strategy": "Strict", "offset": topic_pb2.Deduplication.OFFSET_EARLIEST}
+        ],
+    )
+    async def test_set_topic_deduplication_policy(self, mock_set_policy, args, ensign):
         mock_set_policy.return_value = topic_pb2.TopicStatus(id="123", state=1)
-        state = await ensign.set_topic_deduplication_policy(123, 2)
+        state = await ensign.set_topic_deduplication_policy(123, **args)
+        assert state == TopicState.READY
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.set_topic_sharding_strategy")
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            2, "CONSISTENT_KEY_HASH", topic_pb2.ShardingStrategy.RANDOM,
+        ],
+    )
+    async def test_set_topic_sharding_strategy(self, mock_set_policy, strategy, ensign):
+        mock_set_policy.return_value = topic_pb2.TopicStatus(id="123", state=1)
+        state = await ensign.set_topic_sharding_strategy(123, strategy)
         assert state == TopicState.READY
 
     @pytest.mark.asyncio
