@@ -304,6 +304,35 @@ class Client:
         return rep.query, rep.exists
 
     @catch_rpc_error
+    async def set_topic_deduplication_policy(
+        self,
+        topic_id,
+        strategy=topic_pb2.Deduplication.NONE,
+        offset=topic_pb2.Deduplication.OFFSET_EARLIEST,
+        keys=None,
+        fields=None,
+    ):
+        self._ensure_ready()
+        params = topic_pb2.TopicPolicy(
+            id=topic_id,
+            deduplication_policy=topic_pb2.Deduplication(
+                strategy=strategy,
+                offset=offset,
+                keys=keys,
+                fields=fields,
+            ),
+        )
+        return await self.stub.SetTopicPolicy(params)
+
+    @catch_rpc_error
+    async def set_topic_sharding_strategy(
+        self, topic_id, sharding_strategy=topic_pb2.ShardingStrategy.UNKNOWN
+    ):
+        self._ensure_ready()
+        params = topic_pb2.TopicPolicy(id=topic_id, sharding_strategy=sharding_strategy)
+        return await self.stub.SetTopicPolicy(params)
+
+    @catch_rpc_error
     async def info(self, topics=[]):
         self._ensure_ready()
         return await self.stub.Info(ensign_pb2.InfoRequest(topics=topics))

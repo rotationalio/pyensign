@@ -328,7 +328,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     @authorize
     @user_agent
     def DeleteTopic(self, request, context):
-        return topic_pb2.TopicTombstone(id=request.id)
+        return topic_pb2.TopicStatus(id=request.id)
 
     @authorize
     @user_agent
@@ -343,6 +343,17 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     @user_agent
     def TopicExists(self, request, context):
         return topic_pb2.TopicExistsInfo(query="query", exists=True)
+
+    @authorize
+    @user_agent
+    def SetTopicPolicy(self, request, context):
+        assert request.id is not None
+        assert request.id != ""
+        assert (
+            request.deduplication_policy is not None
+            and request.sharding_strategy is not None
+        )
+        return topic_pb2.TopicStatus(id=request.id, state=topic_pb2.TopicState.PENDING)
 
     @authorize
     @user_agent
@@ -762,6 +773,22 @@ class TestClient:
         query, exists = await client.topic_exists("topic_id", "project_id", "expresso")
         assert query == "query"
         assert exists is True
+
+    @pytest.mark.asyncio
+    async def test_set_topic_deduplication_policy(self, client):
+        status = await client.set_topic_deduplication_policy(
+            "topic_id", topic_pb2.Deduplication.STRICT
+        )
+        assert status.id == "topic_id"
+        assert status.state == topic_pb2.TopicState.PENDING
+
+    @pytest.mark.asyncio
+    async def test_set_topic_sharding_strategy(self, client):
+        status = await client.set_topic_sharding_strategy(
+            "topic_id", topic_pb2.ShardingStrategy.CONSISTENT_KEY_HASH
+        )
+        assert status.id == "topic_id"
+        assert status.state == topic_pb2.TopicState.PENDING
 
     @pytest.mark.asyncio
     async def test_info(self, client):
