@@ -12,7 +12,12 @@ from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2, query_pb2
 from pyensign.auth.client import AuthClient
-from pyensign.enum import TopicState, DeduplicationStrategy, ShardingStrategy
+from pyensign.enum import (
+    TopicState,
+    DeduplicationStrategy,
+    OffsetPosition,
+    ShardingStrategy,
+)
 from pyensign.exceptions import (
     CacheMissError,
     UnknownTopicError,
@@ -478,7 +483,7 @@ class Ensign:
         self,
         id,
         strategy,
-        offset="earliest",
+        offset=OffsetPosition.OFFSET_EARLIEST,
         keys=None,
         fields=None,
     ):
@@ -496,12 +501,18 @@ class Ensign:
             The ID of the topic to set the deduplication policy for.
 
         strategy : DeduplicationStrategy or str
+            The deduplication strategy to set as policy. See DeduplicationStrategy for
+            the various options and more information.
 
-        offset : str (default: "earliest")
+        offset : OffsetPosition or str (default: "earliest")
+            The offset position policy. See OffsetPosition for options and more info.
 
         keys : list (optional, depending on strategy)
+            A list of strings to evaluate in the metadata for the key grouped and
+            unique keys deduplication policies.
 
         fields : list (optional, depending on strategy)
+            A list of strings to evaluate in the data for the unique fields policy.
 
         Returns
         -------
@@ -512,7 +523,8 @@ class Ensign:
         if isinstance(strategy, str):
             strategy = DeduplicationStrategy.parse(strategy)
 
-        # TODO: handle offset enum
+        if isinstance(offset, str):
+            offset = OffsetPosition.parse(offset)
 
         state = await self.client.set_topic_deduplication_policy(
             id, strategy, offset, keys, fields

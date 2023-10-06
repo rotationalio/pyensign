@@ -12,6 +12,7 @@ from pyensign.connection import Cursor
 from pyensign.utils.topics import Topic
 from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2
 from pyensign.ensign import Ensign, authenticate, publisher, subscriber
+from pyensign.enum import TopicState
 from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
@@ -876,6 +877,13 @@ class TestEnsign:
         mock_exists.return_value = (None, True)
         exists = await ensign_no_cache.topic_exists("otters")
         assert exists
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.set_topic_deduplication_policy")
+    async def test_set_topic_deduplication_policy(self, mock_set_policy, ensign):
+        mock_set_policy.return_value = topic_pb2.TopicStatus(id="123", state=1)
+        state = await ensign.set_topic_deduplication_policy(123, 2)
+        assert state == TopicState.READY
 
     @pytest.mark.asyncio
     async def test_live_pubsub(self, live, creds, authserver, ensignserver):
