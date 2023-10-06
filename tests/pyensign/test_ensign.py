@@ -12,6 +12,7 @@ from pyensign.connection import Cursor
 from pyensign.utils.topics import Topic
 from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2
 from pyensign.ensign import Ensign, authenticate, publisher, subscriber
+from pyensign.enum import TopicState
 from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
@@ -765,7 +766,7 @@ class TestEnsign:
     async def test_destroy_topic(self, mock_destroy, ensign):
         mock_destroy.return_value = (
             ULID().bytes,
-            topic_pb2.TopicTombstone.Status.DELETING,
+            topic_pb2.TopicState.DELETING,
         )
         success = await ensign.destroy_topic("otters")
         assert success
@@ -775,7 +776,7 @@ class TestEnsign:
     async def test_destroy_topic_error(self, mock_destroy, ensign):
         mock_destroy.return_value = (
             ULID().bytes,
-            topic_pb2.TopicTombstone.Status.UNKNOWN,
+            topic_pb2.TopicState.UNDEFINED,
         )
         success = await ensign.destroy_topic("otters")
         assert not success
@@ -876,6 +877,38 @@ class TestEnsign:
         mock_exists.return_value = (None, True)
         exists = await ensign_no_cache.topic_exists("otters")
         assert exists
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.set_topic_deduplication_policy")
+    @pytest.mark.parametrize(
+        "args",
+        [
+            {"strategy": 1},
+            {"strategy": "STRICT"},
+            {"strategy": "unique_key", "keys": ["foo", "bar"]},
+            {"strategy": topic_pb2.Deduplication.DATAGRAM, "offset": 2},
+            {"strategy": topic_pb2.Deduplication.STRICT, "offset": "latest"},
+            {"strategy": "unique_field", "fields": ["foo", "bar"]},
+            {"strategy": "Strict", "offset": topic_pb2.Deduplication.OFFSET_EARLIEST}
+        ],
+    )
+    async def test_set_topic_deduplication_policy(self, mock_set_policy, args, ensign):
+        mock_set_policy.return_value = topic_pb2.TopicStatus(id="123", state=1)
+        state = await ensign.set_topic_deduplication_policy(123, **args)
+        assert state == TopicState.READY
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.set_topic_sharding_strategy")
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            2, "CONSISTENT_KEY_HASH", topic_pb2.ShardingStrategy.RANDOM,
+        ],
+    )
+    async def test_set_topic_sharding_strategy(self, mock_set_policy, strategy, ensign):
+        mock_set_policy.return_value = topic_pb2.TopicStatus(id="123", state=1)
+        state = await ensign.set_topic_sharding_strategy(123, strategy)
+        assert state == TopicState.READY
 
     @pytest.mark.asyncio
     async def test_live_pubsub(self, live, creds, authserver, ensignserver):

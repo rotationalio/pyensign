@@ -12,6 +12,12 @@ from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2, query_pb2
 from pyensign.auth.client import AuthClient
+from pyensign.enum import (
+    TopicState,
+    DeduplicationStrategy,
+    OffsetPosition,
+    ShardingStrategy,
+)
 from pyensign.exceptions import (
     CacheMissError,
     UnknownTopicError,
@@ -404,7 +410,7 @@ class Ensign:
         """
 
         _, state = await self.client.destroy_topic(id)
-        return state == topic_pb2.TopicTombstone.Status.DELETING
+        return state == topic_pb2.TopicState.DELETING
 
     async def topic_names(self):
         raise NotImplementedError
@@ -472,6 +478,90 @@ class Ensign:
         # Check existence using Ensign
         _, exists = await self.client.topic_exists(topic_name=name)
         return exists
+
+    async def set_topic_deduplication_policy(
+        self,
+        id,
+        strategy,
+        offset=OffsetPosition.OFFSET_EARLIEST,
+        keys=None,
+        fields=None,
+    ):
+        """
+        Change the deduplication policy of a topic.
+
+        Deduplication detects events that are duplicates of previously published events
+        and marks them as such, omitting them from query results and any online
+        subscribers. Deduplication can significantly reduce storage costs as well as
+        prevent unnecessary processing.
+
+        Parameters
+        ----------
+        id : str
+            The ID of the topic to set the deduplication policy for.
+
+        strategy : DeduplicationStrategy or str
+            The deduplication strategy to set as policy. See DeduplicationStrategy for
+            the various options and more information.
+
+        offset : OffsetPosition or str (default: "earliest")
+            The offset position policy. See OffsetPosition for options and more info.
+
+        keys : list (optional, depending on strategy)
+            A list of strings to evaluate in the metadata for the key grouped and
+            unique keys deduplication policies.
+
+        fields : list (optional, depending on strategy)
+            A list of strings to evaluate in the data for the unique fields policy.
+
+        Returns
+        -------
+        state : TopicState
+            The state of the topic, if READY, the deduplication policy was already set
+            on the topic, if PENDING or REPAIRING, then the policy is being applied.
+        """
+        if isinstance(strategy, str):
+            strategy = DeduplicationStrategy.parse(strategy)
+
+        if isinstance(offset, str):
+            offset = OffsetPosition.parse(offset)
+
+        state = await self.client.set_topic_deduplication_policy(
+            id, strategy, offset, keys, fields
+        )
+        return TopicState.convert(state.state)
+
+    async def set_topic_sharding_strategy(self, id, strategy="no_sharding"):
+        """
+        Change the sharding strategy of a topic.
+
+        The sharding strategy determines how Ensign nodes will distribute events between
+        themselves in a multi-node context, which can increase performance or ensure
+        that event processing happens in parallel.
+
+        WARNING: sharding is only available on multi-node topics. If the topic has not
+        been allocated as a multi-node topic than an exception will be raised.
+
+        Parameters
+        ----------
+        id : str
+            The ID of the topic to change the sharding strategy for.
+
+        strategy : ShardingStrategy or str
+            The strategy to update the topic with. See ShardingStrategy for more info.
+
+        Returns
+        -------
+        state : TopicState
+            The state of the topic, if READY, the sharding strategy was already set on
+            the topic, if PENDING or ALLOCATING, then the sharding strategy is being
+            applied to the topic.
+        """
+        if isinstance(strategy, str):
+            strategy = ShardingStrategy.parse(strategy)
+
+        state = await self.client.set_topic_sharding_strategy(id, strategy)
+        return TopicState.convert(state.state)
 
     async def info(self, topic_ids=[]):
         """
