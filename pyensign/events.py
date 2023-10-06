@@ -96,6 +96,18 @@ class Event:
             created=self.created,
         )
 
+    def published(self):
+        """
+        Returns True if the event has been published (sent to the server).
+        """
+
+        print(self._state)
+        return (
+            self._state == EventState.PUBLISHED
+            or self._state == EventState.ACKED
+            or self._state == EventState.NACKED
+        )
+
     def acked(self):
         """
         Returns True if the event has been acked.
@@ -205,6 +217,9 @@ class Event:
             raise NackError(self.error.code, self.error.error)
 
         return Ack(self.id, self.committed)
+
+    def mark_queued(self):
+        self._state = EventState.QUEUED
 
     def mark_published(self):
         self._state = EventState.PUBLISHED
@@ -329,14 +344,16 @@ class Type:
 class EventState(Enum):
     # Event has been created but not published
     INITIALIZED = 0
+    # Event has been queued for publishing
+    QUEUED = 1
     # Event has been published but not acked by the server
-    PUBLISHED = 1
+    PUBLISHED = 2
     # Event has been received by subscriber but not acked by the user
-    SUBSCRIBED = 2
+    SUBSCRIBED = 3
     # Event has been acked by a user or the server
-    ACKED = 3
+    ACKED = 4
     # Event has been nacked by a user or the server
-    NACKED = 4
+    NACKED = 5
 
 
 def from_object(obj, mimetype=None, encoder=None):

@@ -36,3 +36,13 @@ class WorkerPool:
 
     async def release(self):
         await asyncio.gather(*self.workers)
+
+
+async def with_callback(coro, callback):
+    """
+    Run a coroutine and await a callback when it is done.
+    """
+
+    result = await coro
+    await callback(result)
+    return result

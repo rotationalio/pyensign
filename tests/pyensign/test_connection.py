@@ -442,12 +442,15 @@ class TestClient:
                 published.set()
 
         # Publish events to a server that closes the stream every 3 events.
-        await client.publish(OTTERS_TOPIC, source_events(), on_ack=record_acks)
+        publish_events = asyncio.create_task(
+            client.publish(OTTERS_TOPIC, source_events(), on_ack=record_acks)
+        )
         await published.wait()
 
         # The client should have reconnected at least once and the mock server sends 3
         # acks per connection.
         await client.close()
+        await publish_events
         assert len(ack_ids) % 3 == 0
 
         # Topic IDs from the server should be saved in the client.
@@ -496,25 +499,69 @@ class TestClient:
         assert "I could not process this ack" in caplog.text
         assert "I could not process this nack" in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_publish_flush(self, client):
+        """
+        Test flushing the publish queue.
+        """
+
+        events = [
+            Event(data=b"event1", mimetype="text/plain"),
+            Event(data=b"event2", mimetype="text/plain"),
+        ]
+
+        async def source_events():
+            for event in events:
+                yield event
+
+        await client.publish(OTTERS_TOPIC, source_events())
+
+        # Flush events in the queue.
+        await client.flush()
+
+        # Events should be published.
+        assert events[0].published()
+        assert events[1].published()
+        await client.close()
+
+    @pytest.mark.asyncio
+    @patch("grpc.aio._call.StreamStreamCall.write")
+    async def test_publish_flush_timeout(self, mock_write, client):
+        """
+        Test that flush() raises an exception if the timeout is exceeded.
+        """
+
+        event = Event(data=b"event", mimetype="text/plain")
+
+        # Setup a delay so that writes are slower than the flush timeout.
+        async def delay():
+            await asyncio.sleep(0.1)
+
+        mock_write.side_effect = delay
+
+        async def source_events():
+            yield event
+
+        await client.publish(OTTERS_TOPIC, source_events())
+
+        # Flush events in the queue.
+        with pytest.raises(asyncio.TimeoutError):
+            await client.flush(timeout=timedelta(milliseconds=1))
+
+        await client.close()
+
     def test_publish_sync(self, client):
         """
         Test executing publish from synchronous code as a coroutine.
         """
-        published = False
-
-        async def handle_ack(ack):
-            assert isinstance(ack, ensign_pb2.Ack)
-            nonlocal published
-            published = True
 
         async def publish():
+            event = Event(data=b"event", mimetype="text/plain")
             await client.publish(
                 OTTERS_TOPIC,
-                async_iter([Event(data=b"event", mimetype="text/plain")]),
-                on_ack=handle_ack,
+                async_iter([event]),
             )
-            while not published:
-                await asyncio.sleep(0.1)
+            await event.wait_for_ack()
             await client.close()
 
         asyncio.run(publish())
@@ -561,6 +608,7 @@ class TestClient:
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
+        await client.close()
 
     @pytest.mark.asyncio
     async def test_subscribe_query(self, client):
@@ -588,6 +636,7 @@ class TestClient:
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
+        await client.close()
 
     @pytest.mark.asyncio
     async def test_subscribe_reconnect(self, client):
@@ -609,6 +658,7 @@ class TestClient:
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
+        await client.close()
 
     @pytest.mark.asyncio
     async def test_subscribe_timeout(self, client_no_reconnect):
@@ -621,6 +671,34 @@ class TestClient:
                 assert isinstance(event, Event)
                 await event.ack()
 
+    @pytest.mark.asyncio
+    async def test_subscribe_flush(self, client):
+        """
+        Test flushing the subscribe queue.
+        """
+
+        topic_ids = [str(ULID()), str(ULID())]
+        events = []
+
+        # Consume events from the stream.
+        async for event in client.subscribe(topic_ids):
+            assert isinstance(event, Event)
+            await event.ack()
+            events.append(event)
+            if len(events) == 3:
+                break
+
+        # Topic IDs from the server should be saved in the client.
+        id = client.topics.get(OTTERS_TOPIC.name)
+        assert isinstance(id, ULID)
+
+        # Flush acks in the queue.
+        await client.flush()
+        for _, subscriber in client.subscribers.items():
+            assert subscriber.queue._request_queue.empty()
+
+        await client.close()
+
     def test_subscribe_sync(self, client):
         """
         Test executing subscribe from synchronous code as a coroutine.
@@ -631,6 +709,7 @@ class TestClient:
                 assert isinstance(event, Event)
                 await event.ack()
                 break
+            print("done sub")
             await client.close()
 
         asyncio.run(consume())

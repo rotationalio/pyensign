@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 
 
 class BidiQueue:
@@ -34,6 +35,33 @@ class BidiQueue:
         Read a response from the queue, blocks if the queue is empty.
         """
         return await self._response_queue.get()
+
+    async def requests(self):
+        """
+        Return requests in the queue as an async iterator. The iterator is only
+        exhausted when the queue is closed. If the queue is empty this method will
+        block until there is a request in the queue.
+        """
+        while True:
+            request = await self.read_request()
+            if request is None:
+                break
+            yield request
+
+    async def flush_requests(
+        self, timeout=timedelta(seconds=2.0), tick=timedelta(milliseconds=100)
+    ):
+        """
+        Block until the request queue is empty or the timeout is reached.
+        """
+        while not self._request_queue.empty():
+            await asyncio.sleep(tick.total_seconds())
+            if timeout is not None:
+                timeout -= tick
+                if timeout <= timedelta():
+                    raise asyncio.TimeoutError(
+                        "timeout exceeded before all requests were flushed"
+                    )
 
     async def close(self):
         """

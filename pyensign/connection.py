@@ -193,8 +193,8 @@ class Client:
                 done_callback=lambda: self.publishers.pop(topic_hash, None),
             )
 
-        # Create a concurrent task to queue the events from the user
-        await self.pool.schedule(publisher.queue_events(events))
+        # Queue all the events to be published
+        await publisher.queue_events(events)
 
     @catch_rpc_error
     async def subscribe(self, topics, query=None, consumer_group=None):
@@ -317,13 +317,31 @@ class Client:
         rep = await self.stub.Status(params)
         return rep.status, rep.version, rep.uptime, rep.not_before, rep.not_after
 
+    async def flush(self, timeout=timedelta(seconds=2.0)):
+        """
+        Flush all events that have been queued by publishers but not yet published.
+        """
+
+        # Materialize the list of current publishers. New publishers created after this
+        # point will not be flushed.
+        publishers = list(self.publishers.values())
+        for publisher in publishers:
+            await publisher.flush(timeout=timeout)
+
+        # Materialize the list of current subscribers. New subscribers created after
+        # this point will not be flushed.
+        subscribers = list(self.subscribers.values())
+        for subscriber in subscribers:
+            await subscriber.flush(timeout=timeout)
+
     async def close(self):
         """
-        Close the connection to the server and all ongoing streams.
+        Close the connection to the server and all ongoing streams. This blocks until
+        all requests have been flushed and all streams have been closed.
         """
+        await self._close_streams()
         if self.channel:
             await self.channel.close()
-        await self._close_streams()
         self.channel = None
 
     async def _close_streams(self):
