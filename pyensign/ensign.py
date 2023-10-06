@@ -12,6 +12,7 @@ from pyensign.utils.topics import Topic, TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2, query_pb2
 from pyensign.auth.client import AuthClient
+from pyensign.enum import TopicState, DeduplicationStrategy, ShardingStrategy
 from pyensign.exceptions import (
     CacheMissError,
     UnknownTopicError,
@@ -472,6 +473,83 @@ class Ensign:
         # Check existence using Ensign
         _, exists = await self.client.topic_exists(topic_name=name)
         return exists
+
+    async def set_topic_deduplication_policy(
+        self,
+        id,
+        strategy,
+        offset="earliest",
+        keys=None,
+        fields=None,
+    ):
+        """
+        Change the deduplication policy of a topic.
+
+        Deduplication detects events that are duplicates of previously published events
+        and marks them as such, omitting them from query results and any online
+        subscribers. Deduplication can significantly reduce storage costs as well as
+        prevent unnecessary processing.
+
+        Parameters
+        ----------
+        id : str
+            The ID of the topic to set the deduplication policy for.
+
+        strategy : DeduplicationStrategy or str
+
+        offset : str (default: "earliest")
+
+        keys : list (optional, depending on strategy)
+
+        fields : list (optional, depending on strategy)
+
+        Returns
+        -------
+        state : TopicState
+            The state of the topic, if READY, the deduplication policy was already set
+            on the topic, if PENDING or REPAIRING, then the policy is being applied.
+        """
+        if isinstance(strategy, str):
+            strategy = DeduplicationStrategy.parse(strategy)
+
+        # TODO: handle offset enum
+
+        state = await self.client.set_topic_deduplication_policy(
+            id, strategy, offset, keys, fields
+        )
+        return TopicState.convert(state.state)
+
+    async def set_topic_sharding_strategy(self, id, strategy="no_sharding"):
+        """
+        Change the sharding strategy of a topic.
+
+        The sharding strategy determines how Ensign nodes will distribute events between
+        themselves in a multi-node context, which can increase performance or ensure
+        that event processing happens in parallel.
+
+        WARNING: sharding is only available on multi-node topics. If the topic has not
+        been allocated as a multi-node topic than an exception will be raised.
+
+        Parameters
+        ----------
+        id : str
+            The ID of the topic to change the sharding strategy for.
+
+        strategy : ShardingStrategy or str
+            The strategy to update the topic with. See ShardingStrategy for more info.
+
+        Returns
+        -------
+        state : TopicState
+            The state of the topic, if READY, the sharding strategy was already set on
+            the topic, if PENDING or ALLOCATING, then the sharding strategy is being
+            applied to the topic.
+        """
+        if isinstance(strategy, str):
+            strategy = ShardingStrategy.parse(strategy)
+
+        state = await self.client.set_topic_sharding_strategy(id, strategy)
+        return TopicState.convert(state.state)
 
     async def info(self, topic_ids=[]):
         """
