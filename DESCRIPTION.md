@@ -34,7 +34,14 @@ await client.publish("weather", event1, event2)
 await client.publish("weather", [event1, event2])
 ```
 
-Publish is asynchronous, so one-off scripts should wait for the events to be acked by the server before exiting to ensure that the publish happened.
+Publish is asynchronous. You should generally call `flush()` before your program exits to ensure that all events are published to the server.
+
+```python
+# Wait for events to be published with a default timeout of 2 seconds.
+await client.flush()
+```
+
+For more precision, you can wait for individual events to be acked by the server.
 
 ```python
 ack = await event.wait_for_ack()
