@@ -1,6 +1,7 @@
 import os
 import json
 import inspect
+from datetime import timedelta
 
 from ulid import ULID
 
@@ -605,10 +606,37 @@ class Ensign:
         status, version, uptime, _, _ = await self.client.status()
         return ServerStatus(status, version, uptime)
 
+    async def flush(self, timeout=2.0):
+        """
+        Flush all pending events to and from the server. This method blocks until
+        either all pending events have been published or subscribed or the timeout is
+        reached. An exception is raised if the timeout is reached before all events
+        have been flushed.
+
+        Parameters
+        ----------
+        timeout: float (optional) (default: 2.0)
+            Specify the timeout in seconds.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is reached before all events have been flushed.
+        """
+
+        if timeout <= 0:
+            raise ValueError("timeout must be greater than 0")
+
+        await self.client.flush(timeout=timedelta(seconds=timeout))
+
     async def close(self):
         """
-        Close the Ensign client.
+        Close the Ensign client. This method blocks until all pending events have been
+        flushed and should be called before exiting the application. After the client
+        is closed it cannot be used. The `flush()` method should be used instead if the
+        client still needs to be used.
         """
+
         await self.client.close()
 
     async def __aenter__(self):
@@ -695,6 +723,7 @@ def authenticate(*auth_args, **auth_kwargs):
                 _client = None
                 raise e
 
+            await _client.close()
             _client = None
             return res
 
@@ -717,6 +746,7 @@ def authenticate(*auth_args, **auth_kwargs):
                 _client = None
                 raise e
 
+            await _client.close()
             _client = None
 
         return wrapper
