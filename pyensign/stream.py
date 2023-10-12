@@ -15,6 +15,7 @@ from pyensign.exceptions import (
     EnsignTimeoutError,
     EnsignInitError,
     EnsignInvalidTopicError,
+    EnsignClientClosingError,
     EnsignTopicNotFoundError,
 )
 from pyensign.iterator import ResponseIterator
@@ -79,26 +80,25 @@ class StreamHandler:
         if not self.stream:
             raise EnsignInitError("stream is not initialized")
 
-        while not self.shutdown.is_set():
-            # Run the stream handlers concurrently
+        while True:
+            # Run the stream handlers concurrently.
             requests = asyncio.create_task(self.handle_requests())
             requests.add_done_callback(lambda _: self.stream.cancel())
-
-            async def close_queue(result):
-                await self.queue.close()
-                return result
-
-            responses = asyncio.create_task(
-                with_callback(
-                    asyncio.ensure_future(self.handle_responses()), close_queue
-                )
-            )
+            responses = asyncio.create_task(self.handle_responses())
+            responses.add_done_callback(lambda _: self.queue.done_writing())
             await asyncio.gather(requests, responses)
 
             # We are done writing to the stream
             await self.stream.done_writing()
 
+            # If shutdown is set then don't try to reconnect
+            if self.shutdown.is_set():
+                # Consume any pending requests so close
+                self.queue.discard_requests()
+                return
+
             # Try to reconnect to the stream
+            self.queue.ready()
             try:
                 await self.reconnect()
             except EnsignError as e:
@@ -126,12 +126,6 @@ class StreamHandler:
                 return
             except grpc.aio.AioRpcError:
                 continue
-            except asyncio.CancelledError:
-                # Respect task cancellation from gRPC, which usually means that the
-                # underlying channel was closed by the client. At this point it won't
-                # be possible to reconnect to the stream.
-                await self.close()
-                return
 
         # Timeout expired, give up.
         raise EnsignTimeoutError("timeout expired while trying to reconnect to stream")
@@ -168,11 +162,14 @@ class StreamHandler:
 
     async def close(self):
         """
-        Close the stream as gracefully as possible.
+        Close the stream as gracefully as possible, ensuring that all pending requests
+        are flushed from the queue.
         """
 
         self.shutdown.set()
         await self.queue.close()
+        if self.stream:
+            self.stream.cancel()
 
 
 class Publisher(StreamHandler):
@@ -244,6 +241,15 @@ class Publisher(StreamHandler):
                     f"gRPC error occurred while writing to the publisher stream: {e}",
                 )
                 return e
+            except asyncio.InvalidStateError as e:
+                # TODO: Prevent dropping the event if the stream is closed
+                logging.info(
+                    "publisher stream was unexpectedly closed",
+                )
+                return e
+            finally:
+                # Whether or not the write succeeded, mark the request as processed
+                self.queue.request_done()
 
             id = req.event.local_id
             if id in self.pending:
@@ -299,7 +305,10 @@ class Publisher(StreamHandler):
             # Queue the event
             wrapper = wrap(event.proto(), self.topic.id)
             req = ensign_pb2.PublisherRequest(event=wrapper)
-            await self.queue.write_request(req)
+            try:
+                await self.queue.write_request(req)
+            except asyncio.InvalidStateError:
+                raise EnsignClientClosingError
             event.mark_queued()
 
             # Save the event for ack/nack handling
@@ -396,6 +405,15 @@ class Subscriber(StreamHandler):
                     f"gRPC error occurred while writing to the subscriber stream: {e}"
                 )
                 return e
+            except asyncio.InvalidStateError as e:
+                # TODO: Prevent dropping the ack if the stream is closed
+                logging.info(
+                    "subscriber stream was unexpectedly closed",
+                )
+                return e
+            finally:
+                # Whether or not the write succeeded, mark the request as processed
+                self.queue.request_done()
 
     async def handle_responses(self):
         """
@@ -417,19 +435,11 @@ class Subscriber(StreamHandler):
         coroutine is completely independent from the gRPC stream, so it will continue
         to run even if the stream is closed. This allows the subscriber to reconnect to
         the stream in the background without interrupting any event processing. The
-        caller must handle EnsignError exceptions.
+        caller must handle EnsignError exceptions raised from this iterator.
         """
 
-        while True:
-            rep = await self.queue.read_response()
-            if rep is None:
-                if self.shutdown.is_set():
-                    # If the subscriber is closing, stop consuming events
-                    break
-                else:
-                    # Otherwise, wait for reconnect
-                    continue
-            elif isinstance(rep, EnsignError):
+        async for rep in self.queue.responses():
+            if isinstance(rep, EnsignError):
                 # Raise errors to the caller, this includes connection timeout errors
                 # and protocol errors
                 raise rep

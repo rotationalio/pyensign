@@ -1,5 +1,4 @@
 import grpc
-from grpc import StatusCode
 import pytest
 import asyncio
 from ulid import ULID
@@ -35,8 +34,9 @@ class TestStreamHandler:
             BidiQueue(),
             reconnect_tick=timedelta(milliseconds=1),
         )
-        handler.stream = AsyncMock(spec=["read", "write", "done_writing"])
+        handler.stream = AsyncMock(spec=["read", "write", "done_writing", "cancel"])
         handler.stream.read.side_effect = grpc.aio.AioRpcError(None, None, None)
+        handler.stream.cancel = AsyncMock(not_async=True)
 
         # Run the stream handler in a separate task, which should reconnect a few times
         task = asyncio.create_task(handler.run())
@@ -63,13 +63,12 @@ class TestStreamHandler:
             reconnect_tick=timedelta(milliseconds=1),
             reconnect_timeout=timedelta(milliseconds=5),
         )
-        handler.stream = AsyncMock(spec=["read", "write", "done_writing"])
+        handler.stream = AsyncMock(spec=["read", "write", "done_writing", "cancel"])
         handler.stream.read.side_effect = grpc.aio.AioRpcError(None, None, None)
+        handler.stream.cancel = AsyncMock(not_async=True)
 
         # Run the stream handler which should fail to reconnect
         await handler.run()
-        close_stream = await handler.queue.read_response()
-        assert close_stream is None
         exception = await handler.queue.read_response()
         assert isinstance(exception, EnsignTimeoutError)
 
@@ -121,6 +120,7 @@ class TestPublisher:
             Mock(spec=["client_id", "stub", "topics"]), Topic(id=ULID(), name="topic")
         )
         publisher.stream = AsyncMock()
+        publisher.stream.cancel = AsyncMock(not_async=True)
 
         # Queue some events
         events = [Event(data=b"foo"), Event(data=b"bar")]
@@ -129,6 +129,7 @@ class TestPublisher:
         # Publish the events in the queue
         publish = asyncio.create_task(publisher.handle_requests())
         await publisher.close()
+        publisher.queue.done_writing()
         await publish
 
         # All the events should be in the published state
@@ -260,15 +261,35 @@ class TestSubscriber:
             await subscriber.queue.write_response(
                 wrap(event.proto(), subscriber.topics[0].id)
             )
-        await subscriber.close()
 
         # Consume the events
         async for event in subscriber.consume():
             assert event.data == events[consumed].data
             consumed += 1
+            if consumed == len(events):
+                break
 
-        # All events should be consumed
-        assert consumed == len(events)
+    @pytest.mark.asyncio
+    async def test_consume_stop(self):
+        """
+        Test that consume() stops when the subscriber is closed.
+        """
+
+        subscriber = Subscriber(
+            Mock(spec=["client_id", "stub", "topics"]),
+            [Topic(id=ULID(), name="topic")],
+        )
+
+        async def consume():
+            async for _ in subscriber.consume():
+                pass
+
+        # Run the consumer in a separate task
+        task = asyncio.create_task(consume())
+
+        # Close the subscriber which should stop the iterator
+        await subscriber.close()
+        await task
 
     @pytest.mark.asyncio
     async def test_consume_error(self):
@@ -292,6 +313,7 @@ class TestSubscriber:
             [Topic(id=ULID(), name="topic")],
         )
         subscriber.stream = AsyncMock(spec=["write"])
+        subscriber.stream.cancel = AsyncMock(not_async=True)
 
         # Write some requests to the queue
         requests = [
@@ -304,10 +326,10 @@ class TestSubscriber:
             )
 
         # Consume the requests
-        handler = subscriber.handle_requests()
-        asyncio.create_task(handler)
+        subscribe = asyncio.create_task(subscriber.handle_requests())
         await subscriber.close()
-        await handler
+        subscriber.queue.done_writing()
+        await subscribe
 
         # All requests should be consumed
         assert subscriber.queue._request_queue.empty()

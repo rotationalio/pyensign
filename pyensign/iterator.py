@@ -26,6 +26,9 @@ class ResponseIterator:
                     f"gRPC error occurred while reading from the stream: {e}"
                 )
                 break
+            except StopAsyncIteration:
+                logging.debug("gRPC stream was closed")
+                break
             # Handle unexpected end of stream
             if rep is grpc.aio.EOF:
                 break

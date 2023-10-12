@@ -517,22 +517,26 @@ class TestClient:
         """
 
         events = [
-            Event(data=b"event1", mimetype="text/plain"),
-            Event(data=b"event2", mimetype="text/plain"),
+            Event("event {}".format(i).encode(), mimetype="text/plain")
+            for i in range(1000)
         ]
 
         async def source_events():
             for event in events:
                 yield event
 
+        # Publish a lot of events to fill up the queue.
         await client.publish(OTTERS_TOPIC, source_events())
+        for publisher in client.publishers.values():
+            assert not publisher.queue._request_queue.empty()
 
         # Flush events in the queue.
-        await client.flush()
+        await client.flush(timedelta(seconds=30))
 
-        # Events should be published.
-        assert events[0].published()
-        assert events[1].published()
+        # The publish queue should be empty.
+        for publisher in client.publishers.values():
+            assert publisher.queue._request_queue.empty()
+
         await client.close()
 
     @pytest.mark.asyncio
@@ -542,23 +546,30 @@ class TestClient:
         Test that flush() raises an exception if the timeout is exceeded.
         """
 
-        event = Event(data=b"event", mimetype="text/plain")
+        events = [
+            Event("event {}".format(i).encode(), mimetype="text/plain")
+            for i in range(1000)
+        ]
+
+        async def delay():
+            await asyncio.sleep(1)
 
         # Setup a delay so that writes are slower than the flush timeout.
-        async def delay():
-            await asyncio.sleep(0.1)
-
         mock_write.side_effect = delay
 
         async def source_events():
-            yield event
+            for event in events:
+                yield event
 
         await client.publish(OTTERS_TOPIC, source_events())
+        for publisher in client.publishers.values():
+            assert not publisher.queue._request_queue.empty()
 
-        # Flush events in the queue.
+        # Flush should timeout and raise an exception.
         with pytest.raises(asyncio.TimeoutError):
             await client.flush(timeout=timedelta(milliseconds=1))
 
+        mock_write.side_effect = None
         await client.close()
 
     def test_publish_sync(self, client):
@@ -669,6 +680,7 @@ class TestClient:
         # Topic IDs from the server should be saved in the client.
         id = client.topics.get(OTTERS_TOPIC.name)
         assert isinstance(id, ULID)
+
         await client.close()
 
     @pytest.mark.asyncio
@@ -720,7 +732,6 @@ class TestClient:
                 assert isinstance(event, Event)
                 await event.ack()
                 break
-            print("done sub")
             await client.close()
 
         asyncio.run(consume())

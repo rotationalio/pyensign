@@ -194,6 +194,7 @@ class Client:
             )
 
         # Queue all the events to be published
+        # await self.pool.schedule(publisher.queue_events(events))
         await publisher.queue_events(events)
 
     @catch_rpc_error
