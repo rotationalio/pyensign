@@ -3,8 +3,6 @@ import json
 import inspect
 from datetime import timedelta
 
-from ulid import ULID
-
 from pyensign.connection import Client
 from pyensign.events import from_object
 from pyensign.status import ServerStatus
@@ -39,9 +37,10 @@ from typing import (
     Iterable,
     Coroutine,
     Type,
+    Callable,
 )
 
-from typing import Any, Callable
+from ulid import ULID
 
 
 class Ensign:
@@ -124,10 +123,10 @@ class Ensign:
     async def publish(
         self,
         topic: str,
-        *events: Any,  # This is inferred to be any type, but might be narrowed down later.
+        *events: Any,
         on_ack: Optional[Coroutine] = None,
         on_nack: Optional[Coroutine] = None,
-        ensure_exists: bool = False
+        ensure_exists: bool = False,
     ) -> None:
         """
         Publish events to an Ensign topic. This function is asynchronous; it publishes
@@ -220,7 +219,7 @@ class Ensign:
         *topics: str,
         query: str = "",
         params: Optional[Dict[str, Any]] = None,
-        consumer_group: Optional[Any] = None  # Placeholder for actual type
+        consumer_group: Optional[Any] = None,
     ) -> AsyncGenerator[Any, None]:
         """
         Subscribe to events from the Ensign server. This method returns an async
@@ -298,9 +297,7 @@ class Ensign:
         ):
             yield event
 
-    async def query(
-        self, query: str, params: Optional[Dict[str, Any]] = None
-    ) -> Any:
+    async def query(self, query: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Execute an EnSQL query. This method returns a cursor that can be used to fetch
         the results of the query, via `fetchone()`, `fetchmany()`, or `fetchall()`
@@ -351,7 +348,7 @@ class Ensign:
     async def explain_query(self, query, params):
         raise NotImplementedError
 
-    async def get_topics(self) -> List[Any]:  # Placeholder for actual list type
+    async def get_topics(self) -> List[Any]:
         """
         Get all topics.
 
@@ -392,7 +389,7 @@ class Ensign:
         if self.topics:
             self.topics.add(created.name, id)
         return str(id)
-    
+
     async def ensure_topic_exists(self, topic_name: str) -> str:
         """
         Check if a topic exists and create it if it does not. This is a shortcut for
@@ -419,7 +416,7 @@ class Ensign:
 
     async def archive_topic(self, id):
         raise NotImplementedError
-    
+
     async def destroy_topic(self, id: str) -> bool:
         """
         Completely destroy a topic including all of its data. This operation is
@@ -637,6 +634,7 @@ class Ensign:
 
         status, version, uptime, _, _ = await self.client.status()
         return ServerStatus(status, version, uptime)
+
     async def flush(self, timeout=2.0):
         """
         Flush all pending events to and from the server. This method blocks until
@@ -708,10 +706,13 @@ class Ensign:
 # asyncio coroutines.
 _client = None
 
+
 def authenticate(
-    *auth_args: Any, 
-    **auth_kwargs: Any
-) -> Callable[[Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]], Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]]:
+    *auth_args: Any, **auth_kwargs: Any
+) -> Callable[
+    [Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]],
+    Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]],
+]:
     """
     Decorator function to authenticate with Ensign. This function ideally should only
     be called once, usually at the entry point in the application. Duplicate calls to
@@ -740,6 +741,7 @@ def authenticate(
         ...
     ```
     """
+
     def wrap_coroutine(coro):
         async def wrapper(*args, **kwargs):
             global _client
@@ -785,7 +787,9 @@ def authenticate(
 
     # Return either a coroutine or an async generator wrapper to match the marked
     # function
-    def decorator(coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
+    def decorator(
+        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+    ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
         if inspect.iscoroutinefunction(coro):
             return wrap_coroutine(coro)
         elif inspect.isasyncgenfunction(coro):
@@ -799,11 +803,15 @@ def authenticate(
 
     return decorator
 
+
 def publisher(
-    topic: str, 
-    mimetype: Optional[str] = None, 
-    encoder: Optional[Callable[[Any], Any]] = None
-) -> Callable[[Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]], Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]]:
+    topic: str,
+    mimetype: Optional[str] = None,
+    encoder: Optional[Callable[[Any], Any]] = None,
+) -> Callable[
+    [Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]],
+    Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]],
+]:
     """
     Decorator to mark a publisher function. The return value of the function will be
     published as an event to the topic. If the function is a generator, the events are
@@ -891,7 +899,9 @@ def publisher(
 
     # Return either a coroutine or an async generator wrapper to match the marked
     # function
-    def decorator(coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
+    def decorator(
+        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+    ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
         if inspect.iscoroutinefunction(coro):
             return wrap_coroutine(coro)
         elif inspect.isasyncgenfunction(coro):
@@ -905,7 +915,13 @@ def publisher(
 
     return decorator
 
-def subscriber(*topics: str) -> Callable[[Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]], Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]]:
+
+def subscriber(
+    *topics: str,
+) -> Callable[
+    [Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]],
+    Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]],
+]:
     """
     Decorator to mark a subscriber function. If the function is a coroutine, the events
     are passed to the function as an async generator. If the function is itself an
@@ -967,7 +983,9 @@ def subscriber(*topics: str) -> Callable[[Union[Coroutine[Any, Any, Any], AsyncG
 
     # Return either a coroutine or an async generator wrapper to match the marked
     # function
-    def decorator(coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
+    def decorator(
+        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+    ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
         if inspect.iscoroutinefunction(coro):
             return wrap_coroutine(coro)
         elif inspect.isasyncgenfunction(coro):
