@@ -138,20 +138,21 @@ def async_iter(items):
     return next()
 
 
+@pytest.mark.asyncio
 class TestConnection:
     """
     Test establishing a connection to an Ensign server.
     """
 
-    def test_connect(self):
+    async def test_connect(self):
         conn = Connection("localhost:5356")
         assert conn.create_channel() is not None
 
-    def test_connect_insecure(self):
+    async def test_connect_insecure(self):
         conn = Connection("localhost:5356", insecure=True)
         assert conn.create_channel() is not None
 
-    def test_connect_secure(self, auth):
+    async def test_connect_secure(self, auth):
         conn = Connection("localhost:5356", auth=auth)
         assert conn.create_channel() is not None
 
@@ -164,7 +165,7 @@ class TestConnection:
             "localhost:5356:5356" "https://localhost:5356",
         ],
     )
-    def test_connect_bad_addr(self, addrport):
+    async def test_connect_bad_addr(self, addrport):
         with pytest.raises(ValueError):
             Connection(addrport)
 
