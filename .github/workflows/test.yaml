@@ -18,7 +18,7 @@ jobs:
         working-directory: ${{ github.workspace }}/pyensign
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11.0", "3.12.0"]
 
     steps:
       - name: Checkout Code
