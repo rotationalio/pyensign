@@ -4,6 +4,7 @@ import time
 import pickle
 import asyncio
 from enum import Enum
+from functools import total_ordering
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from pyensign.ack import Ack
@@ -95,6 +96,13 @@ class Event:
             type=self.type.proto(),
             created=self.created,
         )
+
+    def published(self):
+        """
+        Returns True if the event has been published (sent to the server).
+        """
+
+        return self._state >= EventState.PUBLISHED
 
     def acked(self):
         """
@@ -205,6 +213,9 @@ class Event:
             raise NackError(self.error.code, self.error.error)
 
         return Ack(self.id, self.committed)
+
+    def mark_queued(self):
+        self._state = EventState.QUEUED
 
     def mark_published(self):
         self._state = EventState.PUBLISHED
@@ -326,17 +337,25 @@ class Type:
         return "{} v{}".format(self.name, self.semver())
 
 
+@total_ordering
 class EventState(Enum):
     # Event has been created but not published
     INITIALIZED = 0
+    # Event has been queued for publishing
+    QUEUED = 1
     # Event has been published but not acked by the server
-    PUBLISHED = 1
+    PUBLISHED = 2
     # Event has been received by subscriber but not acked by the user
-    SUBSCRIBED = 2
+    SUBSCRIBED = 3
     # Event has been acked by a user or the server
-    ACKED = 3
+    ACKED = 4
     # Event has been nacked by a user or the server
-    NACKED = 4
+    NACKED = 5
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
 
 
 def from_object(obj, mimetype=None, encoder=None):

@@ -89,6 +89,8 @@ def _handle_client_error(e):
         raise EnsignAttributeError(
             "error accessing field from Ensign response: {}".format(e)
         ) from e
+    elif isinstance(e, AuthenticationError):
+        raise e
     elif isinstance(e, QueryNoRows):
         raise e
     elif isinstance(e, EnsignTopicNotFoundError):
