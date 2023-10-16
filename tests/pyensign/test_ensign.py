@@ -9,8 +9,8 @@ from asyncmock import patch
 
 from pyensign.events import Event
 from pyensign.connection import Cursor
-from pyensign.utils.topics import Topic
-from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2
+from pyensign.topics import Topic
+from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2, event_pb2
 from pyensign.ensign import Ensign, authenticate, publisher, subscriber
 from pyensign.enum import TopicState
 from pyensign.exceptions import (
@@ -827,33 +827,159 @@ class TestEnsign:
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.info")
     async def test_info(self, mock_info, ensign):
+        project_id = ULID()
         expected = ensign_pb2.ProjectInfo(
-            project_id=ULID().bytes,
-            num_topics=3,
+            project_id=project_id.bytes,
+            num_topics=2,
             num_readonly_topics=1,
             events=100,
+            duplicates=10,
+            data_size_bytes=1024,
+            topics=[
+                topic_pb2.TopicInfo(
+                    topic_id=ULID().bytes,
+                    project_id=project_id.bytes,
+                    event_offset_id=ULID().bytes,
+                    events=60,
+                    duplicates=6,
+                    data_size_bytes=512,
+                    types=[
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="message",
+                                major_version=1,
+                                minor_version=2,
+                                patch_version=3,
+                            ),
+                            mimetype=MIME.TEXT_PLAIN,
+                            events=60,
+                            duplicates=6,
+                            data_size_bytes=512,
+                        ),
+                    ],
+                ),
+                topic_pb2.TopicInfo(
+                    topic_id=ULID().bytes,
+                    project_id=project_id.bytes,
+                    event_offset_id=ULID().bytes,
+                    events=40,
+                    duplicates=4,
+                    data_size_bytes=512,
+                    types=[
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="data",
+                                major_version=1,
+                                patch_version=2,
+                            ),
+                            mimetype=MIME.APPLICATION_JSON,
+                            events=30,
+                            duplicates=3,
+                            data_size_bytes=256,
+                        ),
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="model",
+                                major_version=2,
+                            ),
+                            mimetype=MIME.APPLICATION_PYTHON_PICKLE,
+                            events=10,
+                            duplicates=1,
+                            data_size_bytes=256,
+                        ),
+                    ],
+                ),
+            ],
         )
         mock_info.return_value = expected
-        actual = await ensign.info()
-        assert actual == expected
+        info = await ensign.info()
+        assert info.id == project_id
+        assert info.num_topics > 0
+        assert info.num_readonly_topics > 0
+        assert info.events > 0
+        assert info.duplicates > 0
+        assert info.data_size_bytes > 0
+        assert len(info.topics) > 0
+        for topic in info.topics:
+            assert isinstance(topic.id, ULID)
+            assert isinstance(topic.project_id, ULID)
+            assert isinstance(topic.event_offset_id, bytes)
+            assert topic.events > 0
+            assert topic.duplicates > 0
+            assert topic.data_size_bytes > 0
+            assert len(topic.types) > 0
+            for type in topic.types:
+                assert len(type.type.semver()) > 0
+                assert type.mimetype > 0
+                assert type.events > 0
+                assert type.duplicates > 0
+                assert type.data_size_bytes > 0
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.info")
     async def test_info_filter(self, mock_info, ensign):
+        project_id = ULID()
         expected = ensign_pb2.ProjectInfo(
-            project_id=ULID().bytes,
-            num_topics=3,
+            project_id=project_id.bytes,
+            num_topics=1,
             num_readonly_topics=1,
             events=100,
+            duplicates=10,
+            data_size_bytes=1024,
+            topics=[
+                topic_pb2.TopicInfo(
+                    topic_id=ULID().bytes,
+                    project_id=project_id.bytes,
+                    event_offset_id=ULID().bytes,
+                    events=60,
+                    duplicates=6,
+                    data_size_bytes=512,
+                    types=[
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="message",
+                                major_version=1,
+                                minor_version=2,
+                                patch_version=3,
+                            ),
+                            mimetype=MIME.TEXT_PLAIN,
+                            events=60,
+                            duplicates=6,
+                            data_size_bytes=512,
+                        ),
+                    ],
+                ),
+            ],
         )
         mock_info.return_value = expected
-        topic_ids = [str(ULID()), str(ULID())]
-        actual = await ensign.info(topic_ids=topic_ids)
+        topic_ids = [str(ULID())]
+        info = await ensign.info(topic_ids=topic_ids)
 
         # Ensure that ID bytes, not ULIDs, are passed to the client
         id_bytes = [ULID.from_str(id).bytes for id in topic_ids]
         mock_info.assert_called_once_with(id_bytes)
-        assert actual == expected
+
+        assert info.id == project_id
+        assert info.num_topics > 0
+        assert info.num_readonly_topics > 0
+        assert info.events > 0
+        assert info.duplicates > 0
+        assert info.data_size_bytes > 0
+        assert len(info.topics) > 0
+        for topic in info.topics:
+            assert isinstance(topic.id, ULID)
+            assert isinstance(topic.project_id, ULID)
+            assert isinstance(topic.event_offset_id, bytes)
+            assert topic.events > 0
+            assert topic.duplicates > 0
+            assert topic.data_size_bytes > 0
+            assert len(topic.types) > 0
+            for type in topic.types:
+                assert len(type.type.semver()) > 0
+                assert type.mimetype > 0
+                assert type.events > 0
+                assert type.duplicates > 0
+                assert type.data_size_bytes > 0
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -889,7 +1015,7 @@ class TestEnsign:
             {"strategy": topic_pb2.Deduplication.DATAGRAM, "offset": 2},
             {"strategy": topic_pb2.Deduplication.STRICT, "offset": "latest"},
             {"strategy": "unique_field", "fields": ["foo", "bar"]},
-            {"strategy": "Strict", "offset": topic_pb2.Deduplication.OFFSET_EARLIEST}
+            {"strategy": "Strict", "offset": topic_pb2.Deduplication.OFFSET_EARLIEST},
         ],
     )
     async def test_set_topic_deduplication_policy(self, mock_set_policy, args, ensign):
@@ -902,7 +1028,9 @@ class TestEnsign:
     @pytest.mark.parametrize(
         "strategy",
         [
-            2, "CONSISTENT_KEY_HASH", topic_pb2.ShardingStrategy.RANDOM,
+            2,
+            "CONSISTENT_KEY_HASH",
+            topic_pb2.ShardingStrategy.RANDOM,
         ],
     )
     async def test_set_topic_sharding_strategy(self, mock_set_policy, strategy, ensign):

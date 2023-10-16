@@ -2,14 +2,27 @@ import os
 import json
 import inspect
 from datetime import timedelta
+from typing import (
+    List,
+    Optional,
+    Union,
+    AsyncGenerator,
+    Dict,
+    Any,
+    Coroutine,
+    Callable,
+)
 
+from ulid import ULID
+from pyensign.topics import Topic
+from pyensign.projects import Project
 from pyensign.connection import Client
 from pyensign.events import from_object
 from pyensign.status import ServerStatus
 from pyensign.api.v1beta1.query import format_query
-from pyensign.utils.topics import Topic, TopicCache
+from pyensign.utils.topics import TopicCache
 from pyensign.connection import Connection
-from pyensign.api.v1beta1 import topic_pb2, query_pb2
+from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
 from pyensign.enum import (
     TopicState,
@@ -25,22 +38,6 @@ from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicNotFoundError,
 )
-
-from typing import (
-    List,
-    Tuple,
-    Optional,
-    Union,
-    AsyncGenerator,
-    Dict,
-    Any,
-    Iterable,
-    Coroutine,
-    Type,
-    Callable,
-)
-
-from ulid import ULID
 
 
 class Ensign:
@@ -591,11 +588,9 @@ class Ensign:
         state = await self.client.set_topic_sharding_strategy(id, strategy)
         return TopicState.convert(state.state)
 
-    async def info(
-        self, topic_ids: List[str] = []
-    ) -> Any:  # Placeholder for return type
+    async def info(self, topic_ids: List[str] = []) -> Any:
         """
-        Get aggregated statistics for topics in the project.
+        Get information about the project and topics in the project.
 
         Parameters
         ----------
@@ -605,8 +600,8 @@ class Ensign:
 
         Returns
         -------
-        api.v1beta1.ProjectInfo
-            The aggregated statistics for the topics in the project.
+        projects.Project
+            The project info.
         """
 
         if not isinstance(topic_ids, list):
@@ -620,7 +615,7 @@ class Ensign:
             except ValueError:
                 raise ValueError(f"not parseable as a topic ID: {id}")
 
-        return await self.client.info(topics)
+        return Project.from_info(await self.client.info(topics))
 
     async def status(self) -> ServerStatus:
         """
