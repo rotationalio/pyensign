@@ -10,7 +10,7 @@ from grpc.aio import AioRpcError
 from grpc.aio._interceptor import InterceptedUnaryStreamCall
 
 from pyensign.events import Event
-from pyensign.utils.topics import Topic
+from pyensign.topics import Topic
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
@@ -19,6 +19,7 @@ from pyensign.connection import Connection
 from pyensign.auth.client import AuthClient
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.api.v1beta1 import ensign_pb2_grpc
+from pyensign.mimetype.v1beta1 import mimetype_pb2
 
 from pyensign.exceptions import (
     UnknownTopicError,
@@ -359,11 +360,69 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     @authorize
     @user_agent
     def Info(self, request, context):
+        project_id = ULID().bytes
         return ensign_pb2.ProjectInfo(
-            project_id=ULID().bytes,
+            project_id=project_id,
             num_topics=3,
             num_readonly_topics=1,
             events=100,
+            duplicates=10,
+            data_size_bytes=1024,
+            topics=[
+                topic_pb2.TopicInfo(
+                    topic_id=ULID().bytes,
+                    project_id=project_id,
+                    event_offset_id=ULID().bytes,
+                    events=60,
+                    duplicates=6,
+                    data_size_bytes=512,
+                    types=[
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="message",
+                                major_version=1,
+                                minor_version=2,
+                                patch_version=3,
+                            ),
+                            mimetype=mimetype_pb2.TEXT_PLAIN,
+                            events=60,
+                            duplicates=6,
+                            data_size_bytes=512,
+                        ),
+                    ],
+                ),
+                topic_pb2.TopicInfo(
+                    topic_id=ULID().bytes,
+                    project_id=project_id,
+                    event_offset_id=ULID().bytes,
+                    events=40,
+                    duplicates=4,
+                    data_size_bytes=512,
+                    types=[
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="data",
+                                major_version=1,
+                                patch_version=2,
+                            ),
+                            mimetype=mimetype_pb2.APPLICATION_JSON,
+                            events=30,
+                            duplicates=3,
+                            data_size_bytes=256,
+                        ),
+                        topic_pb2.EventTypeInfo(
+                            type=event_pb2.Type(
+                                name="model",
+                                major_version=2,
+                            ),
+                            mimetype=mimetype_pb2.APPLICATION_PYTHON_PICKLE,
+                            events=10,
+                            duplicates=1,
+                            data_size_bytes=256,
+                        ),
+                    ],
+                ),
+            ],
         )
 
     @user_agent
@@ -889,6 +948,23 @@ class TestClient:
         assert info.num_topics > 0
         assert info.num_readonly_topics > 0
         assert info.events > 0
+        assert info.duplicates > 0
+        assert info.data_size_bytes > 0
+        assert len(info.topics) > 0
+        for topic in info.topics:
+            assert ULID.from_bytes(topic.topic_id) is not None
+            assert ULID.from_bytes(topic.project_id) is not None
+            assert ULID.from_bytes(topic.event_offset_id) is not None
+            assert topic.events > 0
+            assert topic.duplicates > 0
+            assert topic.data_size_bytes > 0
+            assert len(topic.types) > 0
+            for type in topic.types:
+                assert len(type.type.name) > 0
+                assert type.mimetype > 0
+                assert type.events > 0
+                assert type.duplicates > 0
+                assert type.data_size_bytes > 0
 
     @pytest.mark.asyncio
     async def test_status(self, client):

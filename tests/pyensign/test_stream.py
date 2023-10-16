@@ -6,14 +6,13 @@ from asyncmock import patch, AsyncMock
 from datetime import timedelta
 from unittest.mock import Mock
 
+from pyensign.topics import Topic
 from pyensign.api.v1beta1.event import wrap, unwrap
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.stream import StreamHandler, Publisher, Subscriber
-from pyensign.iterator import ResponseIterator
 from pyensign.utils.queue import BidiQueue
 from pyensign.exceptions import EnsignTimeoutError, EnsignTypeError
 from pyensign.events import Event, EventState, from_proto
-from pyensign.utils.topics import Topic
 
 
 class TestStreamHandler:

@@ -336,6 +336,17 @@ class Type:
     def __str__(self):
         return "{} v{}".format(self.name, self.semver())
 
+    @classmethod
+    def convert(cls, pb_val):
+        """
+        Convert a protocol buffer Type from its protocol buffer representation.
+        """
+        type = cls(pb_val.name)
+        type.major_version = pb_val.major_version
+        type.minor_version = pb_val.minor_version
+        type.patch_version = pb_val.patch_version
+        return type
+
 
 @total_ordering
 class EventState(Enum):
