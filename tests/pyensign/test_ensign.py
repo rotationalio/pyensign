@@ -15,6 +15,7 @@ from pyensign.ensign import Ensign, authenticate, publisher, subscriber
 from pyensign.enum import TopicState
 from pyensign.exceptions import (
     EnsignTopicCreateError,
+    EnsignTopicDestroyError,
     EnsignTopicNotFoundError,
     UnknownTopicError,
     EnsignInvalidArgument,
@@ -763,23 +764,53 @@ class TestEnsign:
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.destroy_topic")
-    async def test_destroy_topic(self, mock_destroy, ensign):
+    async def test_destroy_topic_id(self, mock_destroy, ensign):
+        id = ULID()
+        mock_destroy.return_value = (
+            id.bytes,
+            TopicState.DELETING,
+        )
+        await ensign.destroy_topic(str(id))
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.destroy_topic")
+    async def test_destroy_topic_cached(self, mock_destroy, ensign):
+        ensign.topics.add("otters", ULID())
         mock_destroy.return_value = (
             ULID().bytes,
-            topic_pb2.TopicState.DELETING,
+            TopicState.DELETING,
         )
-        success = await ensign.destroy_topic("otters")
-        assert success
+        await ensign.destroy_topic("otters")
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.destroy_topic")
+    @patch("pyensign.connection.Client.list_topics")
+    async def test_destroy_topic_no_cache(self, mock_list, mock_destroy, ensign):
+        id = ULID()
+        mock_destroy.return_value = (
+            id.bytes,
+            TopicState.DELETING,
+        )
+        mock_list.return_value = ([topic_pb2.Topic(id=id.bytes, name="otters")], "")
+        await ensign.destroy_topic("otters")
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.list_topics")
+    async def test_destroy_topic_not_exists(self, mock_list, ensign):
+        mock_list.return_value = ([], "")
+        with pytest.raises(EnsignTopicNotFoundError):
+            await ensign.destroy_topic("otters")
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.destroy_topic")
     async def test_destroy_topic_error(self, mock_destroy, ensign):
+        ensign.topics.add("otters", ULID())
         mock_destroy.return_value = (
             ULID().bytes,
-            topic_pb2.TopicState.UNDEFINED,
+            TopicState.UNDEFINED,
         )
-        success = await ensign.destroy_topic("otters")
-        assert not success
+        with pytest.raises(EnsignTopicDestroyError):
+            await ensign.destroy_topic("otters")
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
