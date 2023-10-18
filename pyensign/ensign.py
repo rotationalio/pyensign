@@ -220,9 +220,10 @@ class Ensign:
         consumer_group: Optional[Any] = None,
     ) -> AsyncGenerator[Any, None]:
         """
-        Subscribe to events from the Ensign server. This method returns an async
-        generator that yields Event objects, so the `async for` syntax can be used to
-        process events as they are received.
+        Subscribe to realtime events from a set of Ensign topics. This method returns
+        an async generator that yields Event objects, so the `async for` syntax can be
+        used to process events as they are received. To retrieve historical events, use
+        the `query()` method instead.
 
         Parameters
         ----------
@@ -297,9 +298,10 @@ class Ensign:
 
     async def query(self, query: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
-        Execute an EnSQL query. This method returns a cursor that can be used to fetch
-        the results of the query, via `fetchone()`, `fetchmany()`, or `fetchall()`
-        methods.
+        Execute an EnSQL query to retrieve historical events. This method returns a
+        cursor that can be used to fetch the results of the query, via `fetchone()`,
+        `fetchmany()`, or `fetchall()` methods. Alternatively, `async for` syntax can
+        be used to iterate over the results.
 
         Parameters
         ----------
@@ -766,7 +768,6 @@ def authenticate(
                 _client = None
                 raise e
 
-            await _client.close()
             _client = None
             return res
 
@@ -789,7 +790,6 @@ def authenticate(
                 _client = None
                 raise e
 
-            await _client.close()
             _client = None
 
         return wrapper
@@ -984,9 +984,9 @@ def subscriber(
                 )
 
             # Subscribe to the topic and pass each event to the coroutine
-            async for event in _client.subscribe(topics):
-                async for res in coro(event, *args, **kwargs):
-                    yield res
+            events = _client.subscribe(topics)
+            async for res in coro(events, *args, **kwargs):
+                yield res
 
         return wrapper
 
