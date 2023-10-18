@@ -36,6 +36,7 @@ from pyensign.exceptions import (
     InvalidQueryError,
     EnsignInvalidArgument,
     EnsignTopicCreateError,
+    EnsignTopicDestroyError,
     EnsignTopicNotFoundError,
 )
 
@@ -414,7 +415,7 @@ class Ensign:
     async def archive_topic(self, id):
         raise NotImplementedError
 
-    async def destroy_topic(self, id: str) -> bool:
+    async def destroy_topic(self, topic: str):
         """
         Completely destroy a topic including all of its data. This operation is
         asynchronous so it may take some time for the topic to be destroyed.
@@ -423,17 +424,30 @@ class Ensign:
 
         Parameters
         ----------
-        id : str
-            The ID of the topic to destroy.
+        topic : str
+            The name or ID of the topic to destroy.
 
-        Returns
-        -------
-        bool
-            True if the request was accepted, False otherwise.
+        Raises
+        ------
+        EnsignTopicNotFoundError
+            If the topic was not found.
+
+        EnsignTopicDestroyError
+            If the topic could not be destroyed.
         """
 
+        # Resolve the topic ID from the string
+        try:
+            id = self.topics.resolve(topic)
+        except CacheMissError:
+            # If the ID is not in the cache, look it up from the server
+            id = await self.topic_id(topic)
+
         _, state = await self.client.destroy_topic(id)
-        return state == topic_pb2.TopicState.DELETING
+        if state != TopicState.DELETING:
+            raise EnsignTopicDestroyError(
+                "failed to destroy topic, topic state is {}".format(state)
+            )
 
     async def topic_names(self):
         raise NotImplementedError

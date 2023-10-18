@@ -308,6 +308,14 @@ class EnsignTopicCreateError(EnsignError):
     pass
 
 
+class EnsignTopicDestroyError(EnsignError):
+    """
+    Raised when Ensign failed to destroy a topic
+    """
+
+    pass
+
+
 class EnsignInvalidTopicError(EnsignError, ValueError):
     """
     Raised when a topic does not have all required fields

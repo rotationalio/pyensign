@@ -11,6 +11,7 @@ from grpc.aio._interceptor import InterceptedUnaryStreamCall
 
 from pyensign.events import Event
 from pyensign.topics import Topic
+from pyensign.enum import TopicState
 from pyensign.connection import Client
 from pyensign.utils.cache import Cache
 from pyensign.api.v1beta1 import event_pb2
@@ -910,7 +911,7 @@ class TestClient:
     async def test_destroy_topic(self, client):
         id, state = await client.destroy_topic("1")
         assert id == "1"
-        assert isinstance(state, int)
+        assert isinstance(state, TopicState)
 
     @pytest.mark.asyncio
     async def test_topic_names(self, client):

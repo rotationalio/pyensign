@@ -4,6 +4,7 @@ from ulid import ULID
 from grpc import aio
 from datetime import timedelta
 
+from pyensign.enum import TopicState
 from pyensign.events import from_proto
 from pyensign.version import user_agent
 from pyensign.utils.tasks import WorkerPool
@@ -284,7 +285,7 @@ class Client:
             id=id, operation=topic_pb2.TopicMod.Operation.DESTROY
         )
         rep = await self.stub.DeleteTopic(params)
-        return rep.id, rep.state
+        return rep.id, TopicState.convert(rep.state)
 
     @catch_rpc_error
     async def topic_names(self, page_size=100, next_page_token=""):
