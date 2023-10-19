@@ -295,7 +295,12 @@ class Ensign:
         ):
             yield event
 
-    async def query(self, query: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    async def query(
+        self,
+        query: str,
+        params: Optional[Dict[str, Any]] = None,
+        include_duplicates: Optional[bool] = False,
+    ) -> Any:
         """
         Execute an EnSQL query. This method returns a cursor that can be used to fetch
         the results of the query, via `fetchone()`, `fetchmany()`, or `fetchall()`
@@ -318,6 +323,12 @@ class Ensign:
             Parameters to be substituted into the query. Only primitive types are
             supported, i.e. strings, integers, floats, and booleans.
 
+        include_duplicates : bool (optional)
+            If set the query results will include events that were marked as duplicates
+            via the topic deduplication policy. This flag will increase query processing
+            time because duplicates have to be dereferenced from the database, but this
+            flag may be useful in limited queries to debug your deduplication policy.
+
         Returns
         -------
         connection.Cursor
@@ -337,13 +348,15 @@ class Ensign:
 
         # Execute the query and return the cursor to the user
         try:
-            cursor = await self.client.en_sql(format_query(query, params))
+            cursor = await self.client.en_sql(
+                format_query(query, params, include_duplicates)
+            )
         except EnsignInvalidArgument as e:
             raise InvalidQueryError(e.details)
 
         return cursor
 
-    async def explain_query(self, query, params):
+    async def explain_query(self, query, params, include_duplicates=False):
         raise NotImplementedError
 
     async def get_topics(self) -> List[Any]:
