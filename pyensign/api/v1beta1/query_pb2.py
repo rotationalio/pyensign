@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17\x61pi/v1beta1/query.proto\x12\x0e\x65nsign.v1beta1\"A\n\x05Query\x12\r\n\x05query\x18\x01 \x01(\t\x12)\n\x06params\x18\x02 \x03(\x0b\x32\x19.ensign.v1beta1.Parameter\"c\n\tParameter\x12\x0b\n\x01i\x18\x01 \x01(\x12H\x00\x12\x0b\n\x01\x64\x18\x02 \x01(\x01H\x00\x12\x0b\n\x01\x62\x18\x03 \x01(\x08H\x00\x12\x0b\n\x01y\x18\x04 \x01(\x0cH\x00\x12\x0b\n\x01s\x18\x05 \x01(\tH\x00\x12\x0c\n\x04name\x18\x06 \x01(\tB\x07\n\x05value\"\x12\n\x10QueryExplanationb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17\x61pi/v1beta1/query.proto\x12\x0e\x65nsign.v1beta1\"]\n\x05Query\x12\r\n\x05query\x18\x01 \x01(\t\x12)\n\x06params\x18\x02 \x03(\x0b\x32\x19.ensign.v1beta1.Parameter\x12\x1a\n\x12include_duplicates\x18\x03 \x01(\x08\"c\n\tParameter\x12\x0b\n\x01i\x18\x01 \x01(\x12H\x00\x12\x0b\n\x01\x64\x18\x02 \x01(\x01H\x00\x12\x0b\n\x01\x62\x18\x03 \x01(\x08H\x00\x12\x0b\n\x01y\x18\x04 \x01(\x0cH\x00\x12\x0b\n\x01s\x18\x05 \x01(\tH\x00\x12\x0c\n\x04name\x18\x06 \x01(\tB\x07\n\x05value\"\x12\n\x10QueryExplanationb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -21,9 +21,9 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'api.v1beta1.query_pb2', _gl
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   _globals['_QUERY']._serialized_start=43
-  _globals['_QUERY']._serialized_end=108
-  _globals['_PARAMETER']._serialized_start=110
-  _globals['_PARAMETER']._serialized_end=209
-  _globals['_QUERYEXPLANATION']._serialized_start=211
-  _globals['_QUERYEXPLANATION']._serialized_end=229
+  _globals['_QUERY']._serialized_end=136
+  _globals['_PARAMETER']._serialized_start=138
+  _globals['_PARAMETER']._serialized_end=237
+  _globals['_QUERYEXPLANATION']._serialized_start=239
+  _globals['_QUERYEXPLANATION']._serialized_end=257
 # @@protoc_insertion_point(module_scope)
