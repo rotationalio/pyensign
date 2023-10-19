@@ -523,6 +523,7 @@ class Ensign:
         offset: Union[OffsetPosition, str] = OffsetPosition.OFFSET_EARLIEST,
         keys: Optional[List[str]] = None,
         fields: Optional[List[str]] = None,
+        overwrite_duplicate: Optional[bool] = False,
     ) -> TopicState:
         """
         Change the deduplication policy of a topic.
@@ -551,6 +552,13 @@ class Ensign:
         fields : list (optional, depending on strategy)
             A list of strings to evaluate in the data for the unique fields policy.
 
+        overwrite_duplicate : bool (optional, default: False)
+            When set on the policy, duplicates are completely overwitten and cannot be
+            recovered by changing the topic policy. There is still a duplicate
+            placeholder in the stream but the original data is not retrievable. Set this
+            on your policy only if you will never change your policy and want to take
+            advantage of storage space savings.
+
         Returns
         -------
         state : TopicState
@@ -564,7 +572,7 @@ class Ensign:
             offset = OffsetPosition.parse(offset)
 
         state = await self.client.set_topic_deduplication_policy(
-            id, strategy, offset, keys, fields
+            id, strategy, offset, keys, fields, overwrite_duplicate
         )
         return TopicState.convert(state.state)
 
