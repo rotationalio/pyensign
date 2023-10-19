@@ -18,6 +18,7 @@ from pyensign.topics import Topic
 from pyensign.projects import Project
 from pyensign.connection import Client
 from pyensign.events import from_object
+from pyensign.sync import sync_to_async
 from pyensign.status import ServerStatus
 from pyensign.api.v1beta1.query import format_query
 from pyensign.utils.topics import TopicCache
@@ -797,17 +798,19 @@ def authenticate(
     # Return either a coroutine or an async generator wrapper to match the marked
     # function
     def decorator(
-        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+        fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
-        if inspect.iscoroutinefunction(coro):
-            return wrap_coroutine(coro)
-        elif inspect.isasyncgenfunction(coro):
-            return wrap_async_generator(coro)
+        if inspect.isgeneratorfunction(fn):
+            return wrap_async_generator(sync_to_async(fn))
+        elif inspect.isasyncgenfunction(fn):
+            return wrap_async_generator(fn)
+        elif inspect.iscoroutinefunction(fn):
+            return wrap_coroutine(fn)
+        elif inspect.isfunction(fn):
+            return wrap_coroutine(sync_to_async(fn))
         else:
             raise TypeError(
-                "decorated function must be a coroutine or async generator, got {}".format(
-                    type(coro)
-                )
+                "expected a function or generator function, got {}".format(type(fn))
             )
 
     return decorator
@@ -909,17 +912,19 @@ def publisher(
     # Return either a coroutine or an async generator wrapper to match the marked
     # function
     def decorator(
-        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+        fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
-        if inspect.iscoroutinefunction(coro):
-            return wrap_coroutine(coro)
-        elif inspect.isasyncgenfunction(coro):
-            return wrap_async_generator(coro)
+        if inspect.isgeneratorfunction(fn):
+            return wrap_async_generator(sync_to_async(fn))
+        elif inspect.isasyncgenfunction(fn):
+            return wrap_async_generator(fn)
+        elif inspect.iscoroutinefunction(fn):
+            return wrap_coroutine(fn)
+        elif inspect.isfunction(fn):
+            return wrap_coroutine(sync_to_async(fn))
         else:
             raise TypeError(
-                "decorated function must be a coroutine or async generator, got {}".format(
-                    type(coro)
-                )
+                "expected a function or generator function, got {}".format(type(fn))
             )
 
     return decorator

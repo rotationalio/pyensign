@@ -10,6 +10,7 @@ from asyncmock import patch
 from pyensign.events import Event
 from pyensign.connection import Cursor
 from pyensign.topics import Topic
+from pyensign.sync import sync_to_async
 from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2, event_pb2
 from pyensign.ensign import Ensign, authenticate, publisher, subscriber
 from pyensign.enum import TopicState
@@ -326,16 +327,16 @@ class TestEnsign:
     @pytest.mark.asyncio
     async def test_auth_decorator_wrong_type(self):
         """
-        Test cannot use the auth decorator on a non-async function.
+        Test cannot use the auth decorator on a non-funcion.
         """
 
         with pytest.raises(TypeError):
 
             @authenticate()
-            def marked_fn():
-                return True
+            class foo:
+                pass
 
-            marked_fn()
+            foo()
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.publish")
@@ -404,6 +405,28 @@ class TestEnsign:
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.publish")
+    async def test_publish_decorator_sync(self, mock_publish, ensign_args):
+        @authenticate(**ensign_args)
+        @publisher("otters")
+        def marked_fn(obj):
+            return obj
+
+        # Invoke the marked async function
+        val = await marked_fn("Enson")
+        assert val == "Enson"
+
+        # Should have called publish with the correct topic and event
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], Topic)
+        assert args[0].name == "otters"
+
+        async for event in args[1]:
+            assert isinstance(event, Event)
+            assert event.data == b"Enson"
+            assert event.mimetype == MIME.TEXT_PLAIN
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.publish")
     async def test_publish_decorator_encoder(self, mock_publish, ensign_args):
         """
         Test the publish decorator with a custom encoder.
@@ -442,6 +465,29 @@ class TestEnsign:
         @authenticate(**ensign_args)
         @publisher("otters", mimetype="application/json")
         async def marked_fn(objects):
+            for obj in objects:
+                yield obj
+
+        # Invoke the marked async function
+        objects = [{"name": "Enson"}, {"name": "Otto"}]
+        i = 0
+        async for val in marked_fn(objects):
+            assert val == objects[i]
+            args, _ = mock_publish.call_args
+            assert isinstance(args[0], Topic)
+            assert args[0].name == "otters"
+            async for event in args[1]:
+                assert isinstance(event, Event)
+                assert event.data == json.dumps(objects[i]).encode("utf-8")
+                assert event.mimetype == MIME.APPLICATION_JSON
+            i += 1
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.publish")
+    async def test_publish_decorator_generator_sync(self, mock_publish, ensign_args):
+        @authenticate(**ensign_args)
+        @publisher("otters", mimetype="application/json")
+        def marked_fn(objects):
             for obj in objects:
                 yield obj
 
@@ -499,10 +545,10 @@ class TestEnsign:
 
             @authenticate()
             @publisher("otters")
-            def marked_fn():
-                return True
+            class foo:
+                pass
 
-            marked_fn()
+            foo()
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.status")
