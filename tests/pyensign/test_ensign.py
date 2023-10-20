@@ -326,16 +326,16 @@ class TestEnsign:
     @pytest.mark.asyncio
     async def test_auth_decorator_wrong_type(self):
         """
-        Test cannot use the auth decorator on a non-async function.
+        Test cannot use the auth decorator on a non-function.
         """
 
         with pytest.raises(TypeError):
 
             @authenticate()
-            def marked_fn():
-                return True
+            class foo:
+                pass
 
-            marked_fn()
+            foo()
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.publish")
@@ -402,6 +402,30 @@ class TestEnsign:
             assert event.data == expected_data
             assert event.mimetype == expected_mimetype
 
+    @patch("pyensign.connection.Client.publish")
+    def test_publish_decorator_sync(self, mock_publish, ensign_args):
+        @authenticate(**ensign_args)
+        @publisher("otters")
+        def marked_fn(obj):
+            return obj
+
+        # Invoke the marked async function
+        val = marked_fn("Enson")
+        assert val == "Enson"
+
+        # Should have called publish with the correct topic and event
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], Topic)
+        assert args[0].name == "otters"
+
+        async def check_args():
+            async for event in args[1]:
+                assert isinstance(event, Event)
+                assert event.data == b"Enson"
+                assert event.mimetype == MIME.TEXT_PLAIN
+
+        asyncio.run(check_args())
+
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.publish")
     async def test_publish_decorator_encoder(self, mock_publish, ensign_args):
@@ -459,6 +483,32 @@ class TestEnsign:
                 assert event.mimetype == MIME.APPLICATION_JSON
             i += 1
 
+    @patch("pyensign.connection.Client.publish")
+    def test_publish_decorator_generator_sync(self, mock_publish, ensign_args):
+        @authenticate(**ensign_args)
+        @publisher("otters", mimetype="application/json")
+        def marked_fn(objects):
+            for obj in objects:
+                yield obj
+
+        # Invoke the marked async function
+        objects = [{"name": "Enson"}, {"name": "Otto"}]
+        i = 0
+        for val in marked_fn(objects):
+            assert val == objects[i]
+            args, _ = mock_publish.call_args
+            assert isinstance(args[0], Topic)
+            assert args[0].name == "otters"
+
+            async def check_args():
+                async for event in args[1]:
+                    assert isinstance(event, Event)
+                    assert event.data == json.dumps(objects[i]).encode("utf-8")
+                    assert event.mimetype == MIME.APPLICATION_JSON
+
+            asyncio.run(check_args())
+            i += 1
+
     @pytest.mark.asyncio
     async def test_publish_decorator_no_auth(self):
         """
@@ -499,10 +549,10 @@ class TestEnsign:
 
             @authenticate()
             @publisher("otters")
-            def marked_fn():
-                return True
+            class foo:
+                pass
 
-            marked_fn()
+            foo()
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.status")
@@ -610,6 +660,32 @@ class TestEnsign:
         assert len(all_events) == 1
         assert isinstance(all_events[0], Event)
 
+    @patch("pyensign.connection.Client.subscribe")
+    def test_subscriber_decorator_sync(self, mock_subscribe, ensign_args):
+        all_events = []
+        mock_subscribe.return_value = async_iter(
+            [Event(b"foo", "text/plain"), Event(b"bar", "text/plain")]
+        )
+
+        @authenticate(**ensign_args)
+        @subscriber("otters")
+        def marked_fn(event, arg, keyword_arg="default"):
+            assert arg == "arg"
+            assert keyword_arg == "override"
+            all_events.append(event)
+
+        # Invoke the subscriber
+        marked_fn("arg", keyword_arg="override")
+
+        # Should have called subscribe with the topic
+        args, _ = mock_subscribe.call_args
+        assert args[0] == ["otters"]
+
+        # Events should be passed to the subscriber
+        assert len(all_events) == 2
+        assert isinstance(all_events[0], Event)
+        assert isinstance(all_events[1], Event)
+
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.subscribe")
     async def test_subscriber_generator(self, mock_subscribe, ensign_args):
@@ -636,6 +712,24 @@ class TestEnsign:
         assert len(events) == 2
         assert events[0].data == b"foo"
         assert events[1].data == b"bar"
+
+    @patch("pyensign.connection.Client.subscribe")
+    def test_subscriber_generator_sync(self, mock_subscribe, ensign_args):
+        events = []
+        mock_subscribe.return_value = async_iter(
+            [Event(b"foo", "text/plain"), Event(b"bar", "text/plain")]
+        )
+
+        # Synchronous generators not currently supported on subscribe
+        with pytest.raises(TypeError):
+
+            @authenticate(**ensign_args)
+            @subscriber("otters", "lighthouses")
+            def marked_fn(event):
+                yield event
+
+            for event in marked_fn():
+                events.append(event)
 
     @pytest.mark.asyncio
     async def test_subscriber_decorator_no_auth(self):

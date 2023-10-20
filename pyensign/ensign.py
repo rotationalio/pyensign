@@ -24,6 +24,7 @@ from pyensign.utils.topics import TopicCache
 from pyensign.connection import Connection
 from pyensign.api.v1beta1 import topic_pb2
 from pyensign.auth.client import AuthClient
+from pyensign.sync import sync_to_async, async_to_sync
 from pyensign.enum import (
     TopicState,
     DeduplicationStrategy,
@@ -222,8 +223,8 @@ class Ensign:
         """
         Subscribe to realtime events from a set of Ensign topics. This method returns
         an async generator that yields Event objects, so the `async for` syntax can be
-        used to process events as they are received. To retrieve historical events, use
-        the `query()` method instead.
+        used to process events as they are published. To retrieve events published
+        before now, use the `query()` method instead.
 
         Parameters
         ----------
@@ -303,10 +304,10 @@ class Ensign:
         include_duplicates: Optional[bool] = False,
     ) -> Any:
         """
-        Execute an EnSQL query to retrieve historical events. This method returns a
-        cursor that can be used to fetch the results of the query, via `fetchone()`,
-        `fetchmany()`, or `fetchall()` methods. Alternatively, `async for` syntax can
-        be used to iterate over the results.
+        Execute an EnSQL query to retrieve events from the topic no matter when they
+        were published. This method returns a cursor that can be used to fetch the
+        results of the query, via `fetchone()`, `fetchmany()`, or `fetchall()` methods.
+        Alternatively, `async for` syntax can be used to iterate over the results.
 
         Parameters
         ----------
@@ -815,20 +816,32 @@ def authenticate(
 
         return wrapper
 
-    # Return either a coroutine or an async generator wrapper to match the marked
-    # function
     def decorator(
-        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+        fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
-        if inspect.iscoroutinefunction(coro):
-            return wrap_coroutine(coro)
-        elif inspect.isasyncgenfunction(coro):
-            return wrap_async_generator(coro)
+        """
+        The function can be a regular function or a generator function, and it can also
+        be synchronous or async. This decorator will handle all of those cases by
+        returning the appropriate wrapper function.
+        """
+        if inspect.isgeneratorfunction(fn):
+            # If we have a generator function, make it async. Also wrap the resulting
+            # generator in a sync wrapper so that it can be called from sync code.
+            return async_to_sync(wrap_async_generator(sync_to_async(fn)))
+        elif inspect.isasyncgenfunction(fn):
+            # If we have an async generator function we can wrap it in an async
+            # generator.
+            return wrap_async_generator(fn)
+        elif inspect.iscoroutinefunction(fn):
+            # If we have a coroutine function we can just await it in the wrapper.
+            return wrap_coroutine(fn)
+        elif inspect.isfunction(fn):
+            # If we have a regular function, make it async. Also wrap the resulting
+            # coroutine in a sync wrapper so that it can be called from sync code.
+            return async_to_sync(wrap_coroutine(sync_to_async(fn)))
         else:
             raise TypeError(
-                "decorated function must be a coroutine or async generator, got {}".format(
-                    type(coro)
-                )
+                "expected a function or generator function, got {}".format(type(fn))
             )
 
     return decorator
@@ -878,14 +891,17 @@ def publisher(
     ```
     """
 
+    def check_client():
+        global _client
+        if _client is None:
+            raise RuntimeError(
+                "publisher requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
+            )
+
     def wrap_coroutine(coro):
         async def wrapper(*args, **kwargs):
-            # Create the Ensign client if not already created
-            global _client
-            if _client is None:
-                raise RuntimeError(
-                    "publish requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
-                )
+            # Ensign client must already exist in this context
+            check_client()
 
             # Call the function and get the return value
             val = await coro(*args, **kwargs)
@@ -904,12 +920,8 @@ def publisher(
 
     def wrap_async_generator(coro):
         async def wrapper(*args, **kwargs):
-            # Create the Ensign client if not already created
-            global _client
-            if _client is None:
-                raise RuntimeError(
-                    "publish requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
-                )
+            # Ensign client must already exist in this context
+            check_client()
 
             # Yield the values from the generator
             async for val in coro(*args, **kwargs):
@@ -927,20 +939,32 @@ def publisher(
 
         return wrapper
 
-    # Return either a coroutine or an async generator wrapper to match the marked
-    # function
     def decorator(
-        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+        fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
-        if inspect.iscoroutinefunction(coro):
-            return wrap_coroutine(coro)
-        elif inspect.isasyncgenfunction(coro):
-            return wrap_async_generator(coro)
+        """
+        The function can be a regular function or a generator function, and it can also
+        be synchronous or async. This decorator will handle all of those cases by
+        returning the appropriate wrapper function.
+        """
+        if inspect.isgeneratorfunction(fn):
+            # If we have a generator function, make it async. Also wrap the resulting
+            # generator in a sync wrapper so that it can be called from sync code.
+            return async_to_sync(wrap_async_generator(sync_to_async(fn)))
+        elif inspect.isasyncgenfunction(fn):
+            # If we have an async generator function we can wrap it in an async
+            # generator.
+            return wrap_async_generator(fn)
+        elif inspect.iscoroutinefunction(fn):
+            # If we have a coroutine function we can just await it in the wrapper.
+            return wrap_coroutine(fn)
+        elif inspect.isfunction(fn):
+            # If we have a regular function, make it async. Also wrap the resulting
+            # coroutine in a sync wrapper so that it can be called from sync code.
+            return async_to_sync(wrap_coroutine(sync_to_async(fn)))
         else:
             raise TypeError(
-                "decorated function must be a coroutine or async generator, got {}".format(
-                    type(coro)
-                )
+                "expected a function or generator function, got {}".format(type(fn))
             )
 
     return decorator
@@ -953,11 +977,11 @@ def subscriber(
     Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]],
 ]:
     """
-    Decorator to mark a subscriber function. If the function is a coroutine, the events
-    are passed to the function as an async generator. If the function is itself an
-    async generator, then it's invoked for each event received on the topic. This
-    method assumes that you have already authenticated with Ensign using the
-    `@authenticate` decorator.
+    Decorator to mark a subscriber function. If the function is a coroutine then the
+    events are passed to the function as an async generator. If the function is not a
+    coroutine then the function is treated like a callback - it will be invoked with
+    each event that is received. This method assumes that you have already
+    authenticated with Ensign using the `@authenticate` decorator.
 
     Parameters
     ----------
@@ -967,31 +991,41 @@ def subscriber(
     Usage
     -----
     ```
-    # Subscribe to the topic 'my-topic'
+    # Subscribe to a topic using a generator
     @subscriber("my-topic")
     async def process_events(events):
         async for event in events:
             # Process the event
 
-    # Subscribe using a generator
+    # Subscribe to a topic using a callback
     @subscriber("my-topic")
-    async def process_events(event):
-        # Process the event and yield to the caller
-        yield result
+    def process_event(event):
+        # Process the event
+    ```
     """
+
+    def subscribe():
+        global _client
+        if _client is None:
+            raise RuntimeError(
+                "subscriber requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
+            )
+
+        # Get the iterator for the events
+        return _client.subscribe(topics)
+
+    def wrap_function(fn):
+        async def wrapper(*args, **kwargs):
+            # Treat the function like a callback
+            async for event in subscribe():
+                fn(event, *args, **kwargs)
+
+        return wrapper
 
     def wrap_coroutine(coro):
         async def wrapper(*args, **kwargs):
-            # Create the Ensign client if not already created
-            global _client
-            if _client is None:
-                raise RuntimeError(
-                    "subscriber requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
-                )
-
-            # Subscribe to the topic and pass the generator to the coroutine
-            events = _client.subscribe(topics)
-            await coro(events, *args, **kwargs)
+            # Subscribe to the topics and pass the generator to the coroutine
+            await coro(subscribe(), *args, **kwargs)
 
         return wrapper
 
@@ -1004,27 +1038,39 @@ def subscriber(
                     "subscriber requires a connection to Ensign, please use the authenticate decorator to provide your credentials"
                 )
 
-            # Subscribe to the topic and pass each event to the coroutine
-            events = _client.subscribe(topics)
+            # Subscribe to the topic and pass the generator to the async generator
+            events = subscribe()
             async for res in coro(events, *args, **kwargs):
                 yield res
 
         return wrapper
 
-    # Return either a coroutine or an async generator wrapper to match the marked
-    # function
     def decorator(
-        coro: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
+        fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
-        if inspect.iscoroutinefunction(coro):
-            return wrap_coroutine(coro)
-        elif inspect.isasyncgenfunction(coro):
-            return wrap_async_generator(coro)
+        """
+        The function can be a regular function or a generator function, and it can also
+        be synchronous or async. This decorator will handle all of those cases by
+        returning the appropriate wrapper function.
+        """
+        if inspect.isgeneratorfunction(fn):
+            raise TypeError(
+                "subscriber does not support synchronous generator functions, please use a coroutine or async generator"
+            )
+        elif inspect.isasyncgenfunction(fn):
+            # If we have an async generator function we can wrap it in an async
+            # generator.
+            return wrap_async_generator(fn)
+        elif inspect.iscoroutinefunction(fn):
+            # If we have a coroutine function we can just await it in the wrapper.
+            return wrap_coroutine(fn)
+        elif inspect.isfunction(fn):
+            # If we have a regular function, make it async. Also wrap the resulting
+            # coroutine in a sync wrapper so that it can be called from sync code.
+            return async_to_sync(wrap_function(fn))
         else:
             raise TypeError(
-                "decorated function must be a coroutine or async generator, got {}".format(
-                    type(coro)
-                )
+                "expected a function or generator function, got {}".format(type(fn))
             )
 
     return decorator
