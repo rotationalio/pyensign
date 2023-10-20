@@ -816,18 +816,28 @@ def authenticate(
 
         return wrapper
 
-    # Return either a coroutine or an async generator wrapper to match the marked
-    # function
     def decorator(
         fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
+        """
+        The function can be a regular function or a generator function, and it can also
+        be synchronous or async. This decorator will handle all of those cases by
+        returning the appropriate wrapper function.
+        """
         if inspect.isgeneratorfunction(fn):
+            # If we have a generator function, make it async. Also wrap the resulting
+            # generator in a sync wrapper so that it can be called from sync code.
             return async_to_sync(wrap_async_generator(sync_to_async(fn)))
         elif inspect.isasyncgenfunction(fn):
+            # If we have an async generator function we can wrap it in an async
+            # generator.
             return wrap_async_generator(fn)
         elif inspect.iscoroutinefunction(fn):
+            # If we have a coroutine function we can just await it in the wrapper.
             return wrap_coroutine(fn)
         elif inspect.isfunction(fn):
+            # If we have a regular function, make it async. Also wrap the resulting
+            # coroutine in a sync wrapper so that it can be called from sync code.
             return async_to_sync(wrap_coroutine(sync_to_async(fn)))
         else:
             raise TypeError(
@@ -929,18 +939,28 @@ def publisher(
 
         return wrapper
 
-    # Return either a coroutine or an async generator wrapper to match the marked
-    # function
     def decorator(
         fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
+        """
+        The function can be a regular function or a generator function, and it can also
+        be synchronous or async. This decorator will handle all of those cases by
+        returning the appropriate wrapper function.
+        """
         if inspect.isgeneratorfunction(fn):
+            # If we have a generator function, make it async. Also wrap the resulting
+            # generator in a sync wrapper so that it can be called from sync code.
             return async_to_sync(wrap_async_generator(sync_to_async(fn)))
         elif inspect.isasyncgenfunction(fn):
+            # If we have an async generator function we can wrap it in an async
+            # generator.
             return wrap_async_generator(fn)
         elif inspect.iscoroutinefunction(fn):
+            # If we have a coroutine function we can just await it in the wrapper.
             return wrap_coroutine(fn)
         elif inspect.isfunction(fn):
+            # If we have a regular function, make it async. Also wrap the resulting
+            # coroutine in a sync wrapper so that it can be called from sync code.
             return async_to_sync(wrap_coroutine(sync_to_async(fn)))
         else:
             raise TypeError(
@@ -1025,21 +1045,28 @@ def subscriber(
 
         return wrapper
 
-    # Return either a coroutine or an async generator wrapper to match the marked
-    # function
     def decorator(
         fn: Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]
     ) -> Union[Coroutine[Any, Any, Any], AsyncGenerator[Any, None]]:
-        # Wrap the function appropriately
+        """
+        The function can be a regular function or a generator function, and it can also
+        be synchronous or async. This decorator will handle all of those cases by
+        returning the appropriate wrapper function.
+        """
         if inspect.isgeneratorfunction(fn):
             raise TypeError(
                 "subscriber does not support synchronous generator functions, please use a coroutine or async generator"
             )
         elif inspect.isasyncgenfunction(fn):
+            # If we have an async generator function we can wrap it in an async
+            # generator.
             return wrap_async_generator(fn)
         elif inspect.iscoroutinefunction(fn):
+            # If we have a coroutine function we can just await it in the wrapper.
             return wrap_coroutine(fn)
         elif inspect.isfunction(fn):
+            # If we have a regular function, make it async. Also wrap the resulting
+            # coroutine in a sync wrapper so that it can be called from sync code.
             return async_to_sync(wrap_function(fn))
         else:
             raise TypeError(

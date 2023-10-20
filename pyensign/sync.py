@@ -32,16 +32,16 @@ def async_to_sync(coro):
 
 def coro_to_sync(coro):
     def wrap(*args, **kwargs):
-        # Ensure there is no running event loop
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             pass
         else:
+            # If there is a running event loop, add the coroutine to the event loop
             if loop.is_running():
-                raise RuntimeError(
-                    "cannot use async_to_async inside an event loop, instead the async function should be awaited directly"
-                )
+                return asyncio.run_coroutine_threadsafe(
+                    coro(*args, **kwargs), loop
+                ).result()
 
         return asyncio.run(coro(*args, **kwargs))
 
@@ -49,23 +49,25 @@ def coro_to_sync(coro):
 
 
 def async_gen_to_sync(gen):
-    def wrap(*args, **kwargs):
-        # Ensure there is no running event loop
+    def run_in_current_loop(gen):
+        loop = None
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             pass
         else:
+            # If there is a running event loop, call the generator in the event loop
             if loop.is_running():
-                raise RuntimeError(
-                    "cannot use async_to_async inside an event loop, instead the async function should be awaited directly"
-                )
+                return asyncio.run_coroutine_threadsafe(gen.__anext__(), loop).result()
 
+        return asyncio.run(gen.__anext__())
+
+    def wrap(*args, **kwargs):
         iter = gen(*args, **kwargs)
 
         def sync_next():
             try:
-                return asyncio.run(iter.__anext__())
+                return run_in_current_loop(iter)
             except StopIteration:
                 raise StopAsyncIteration
 

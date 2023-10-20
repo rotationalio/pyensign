@@ -326,7 +326,7 @@ class TestEnsign:
     @pytest.mark.asyncio
     async def test_auth_decorator_wrong_type(self):
         """
-        Test cannot use the auth decorator on a non-funcion.
+        Test cannot use the auth decorator on a non-function.
         """
 
         with pytest.raises(TypeError):
