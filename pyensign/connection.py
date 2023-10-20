@@ -313,6 +313,7 @@ class Client:
         offset=topic_pb2.Deduplication.OFFSET_EARLIEST,
         keys=None,
         fields=None,
+        overwrite_duplicate=False,
     ):
         self._ensure_ready()
         params = topic_pb2.TopicPolicy(
@@ -322,6 +323,7 @@ class Client:
                 offset=offset,
                 keys=keys,
                 fields=fields,
+                overwrite_duplicate=overwrite_duplicate,
             ),
         )
         return await self.stub.SetTopicPolicy(params)
