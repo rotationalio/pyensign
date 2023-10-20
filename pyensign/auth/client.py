@@ -146,3 +146,9 @@ class AuthClient(grpc.AuthMetadataPlugin):
             raise AuthenticationError(
                 "Failed to connect to authentication server: [{}] {}".format(code, msg)
             )
+        except Exception as e:
+            raise AuthenticationError(
+                "Unexpected error occurred while authenticating with API credentials: {}".format(
+                    e
+                )
+            )
