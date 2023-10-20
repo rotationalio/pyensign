@@ -620,8 +620,9 @@ class TestEnsign:
 
         @authenticate(**ensign_args)
         @subscriber("otters", "lighthouses")
-        async def marked_fn(event):
-            yield event
+        async def marked_fn(events):
+            async for event in events:
+                yield event
 
         # Read events from the subscriber
         async for event in marked_fn():
@@ -667,6 +668,40 @@ class TestEnsign:
         # No topic provided should be a ValueError
         with pytest.raises(ValueError):
             await marked_fn()
+
+    @pytest.mark.asyncio
+    @patch("pyensign.connection.Client.publish")
+    @patch("pyensign.connection.Client.subscribe")
+    async def test_sub_pub_decorators(self, mock_subscribe, mock_publish, ensign_args):
+        """
+        Test a decorated method that's both a subscriber and publisher.
+        """
+
+        events = [Event(b"foo", "text/plain"), Event(b"bar", "text/plain")]
+        mock_subscribe.return_value = async_iter(events)
+
+        @authenticate(**ensign_args)
+        @subscriber("otters")
+        @publisher("lighthouses")
+        async def marked_fn(events):
+            async for event in events:
+                yield event.data
+
+        # Invoke the marked async function
+        results = [data async for data in marked_fn()]
+        assert results == [b"foo", b"bar"]
+
+        # Should have called subscribe with the topic
+        args, _ = mock_subscribe.call_args
+        assert args[0] == ["otters"]
+
+        # Should have called publish with the topic and events
+        args, _ = mock_publish.call_args
+        assert isinstance(args[0], Topic)
+        assert args[0].name == "lighthouses"
+        async for event in args[1]:
+            assert isinstance(event, Event)
+            assert event.data in [b"foo", b"bar"]
 
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.en_sql")

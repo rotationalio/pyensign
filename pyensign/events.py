@@ -50,6 +50,9 @@ class Event:
         if not data:
             raise ValueError("no data provided")
 
+        if not isinstance(data, bytes):
+            raise TypeError("event data must be bytes, got type {}".format(type(data)))
+
         if mimetype is None:
             raise ValueError("no mimetype provided")
 
