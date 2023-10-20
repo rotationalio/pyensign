@@ -223,8 +223,8 @@ class Ensign:
         """
         Subscribe to realtime events from a set of Ensign topics. This method returns
         an async generator that yields Event objects, so the `async for` syntax can be
-        used to process events as they are received. To retrieve historical events, use
-        the `query()` method instead.
+        used to process events as they are published. To retrieve events published
+        before now, use the `query()` method instead.
 
         Parameters
         ----------
@@ -304,10 +304,10 @@ class Ensign:
         include_duplicates: Optional[bool] = False,
     ) -> Any:
         """
-        Execute an EnSQL query to retrieve historical events. This method returns a
-        cursor that can be used to fetch the results of the query, via `fetchone()`,
-        `fetchmany()`, or `fetchall()` methods. Alternatively, `async for` syntax can
-        be used to iterate over the results.
+        Execute an EnSQL query to retrieve events from the topic no matter when they
+        were published. This method returns a cursor that can be used to fetch the
+        results of the query, via `fetchone()`, `fetchmany()`, or `fetchall()` methods.
+        Alternatively, `async for` syntax can be used to iterate over the results.
 
         Parameters
         ----------
