@@ -296,7 +296,12 @@ class Ensign:
         ):
             yield event
 
-    async def query(self, query: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    async def query(
+        self,
+        query: str,
+        params: Optional[Dict[str, Any]] = None,
+        include_duplicates: Optional[bool] = False,
+    ) -> Any:
         """
         Execute an EnSQL query to retrieve historical events. This method returns a
         cursor that can be used to fetch the results of the query, via `fetchone()`,
@@ -320,6 +325,12 @@ class Ensign:
             Parameters to be substituted into the query. Only primitive types are
             supported, i.e. strings, integers, floats, and booleans.
 
+        include_duplicates : bool (optional)
+            If set the query results will include events that were marked as duplicates
+            via the topic deduplication policy. This flag will increase query processing
+            time because duplicates have to be dereferenced from the database, but this
+            flag may be useful in limited queries to debug your deduplication policy.
+
         Returns
         -------
         connection.Cursor
@@ -339,13 +350,15 @@ class Ensign:
 
         # Execute the query and return the cursor to the user
         try:
-            cursor = await self.client.en_sql(format_query(query, params))
+            cursor = await self.client.en_sql(
+                format_query(query, params, include_duplicates)
+            )
         except EnsignInvalidArgument as e:
             raise InvalidQueryError(e.details)
 
         return cursor
 
-    async def explain_query(self, query, params):
+    async def explain_query(self, query, params, include_duplicates=False):
         raise NotImplementedError
 
     async def get_topics(self) -> List[Any]:
@@ -525,6 +538,7 @@ class Ensign:
         offset: Union[OffsetPosition, str] = OffsetPosition.OFFSET_EARLIEST,
         keys: Optional[List[str]] = None,
         fields: Optional[List[str]] = None,
+        overwrite_duplicate: Optional[bool] = False,
     ) -> TopicState:
         """
         Change the deduplication policy of a topic.
@@ -553,6 +567,13 @@ class Ensign:
         fields : list (optional, depending on strategy)
             A list of strings to evaluate in the data for the unique fields policy.
 
+        overwrite_duplicate : bool (optional, default: False)
+            When set on the policy, duplicates are completely overwitten and cannot be
+            recovered by changing the topic policy. There is still a duplicate
+            placeholder in the stream but the original data is not retrievable. Set this
+            on your policy only if you will never change your policy and want to take
+            advantage of storage space savings.
+
         Returns
         -------
         state : TopicState
@@ -566,7 +587,7 @@ class Ensign:
             offset = OffsetPosition.parse(offset)
 
         state = await self.client.set_topic_deduplication_policy(
-            id, strategy, offset, keys, fields
+            id, strategy, offset, keys, fields, overwrite_duplicate
         )
         return TopicState.convert(state.state)
 

@@ -1,7 +1,7 @@
 from pyensign.api.v1beta1 import query_pb2
 
 
-def format_query(query, params=None):
+def format_query(query, params=None, include_duplicates=False):
     """
     Accepts a query string and parameters, performs any necessary preprocessing and
     valiation and returns a properly formatted query for use with Ensign.
@@ -13,6 +13,9 @@ def format_query(query, params=None):
 
     params : dict
         A dictionary of parameters to be substituted into the query string.
+
+    include_duplicates : bool
+        Adds the include_duplicates query option to the returned query.
 
     Returns
     -------
@@ -57,4 +60,6 @@ def format_query(query, params=None):
                     "unsupported parameter type: {}".format(type(value).__name__)
                 )
 
-    return query_pb2.Query(query=query, params=parameters)
+    return query_pb2.Query(
+        query=query, params=parameters, include_duplicates=include_duplicates
+    )
