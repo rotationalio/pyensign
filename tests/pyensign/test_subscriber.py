@@ -6,6 +6,7 @@ import pytest
 from asyncmock import patch
 
 from pyensign.events import Event
+from pyensign.utils.rlid import RLID
 from pyensign.utils.queue import BidiQueue
 from pyensign.subscriber import Subscriber
 from pyensign.exceptions import UnknownTopicError
@@ -41,7 +42,8 @@ class TestSubscriber:
     def test_run(self, mock_subscribe):
         # Create a fake event for the subscriber to receive.
         events = [Event(data=b"event1", mimetype="text/plain")]
-        events[0].mark_subscribed(randbytes(10), BidiQueue())
+        events[0].id = RLID(randbytes(10))
+        events[0].mark_subscribed(BidiQueue())
         mock_subscribe.return_value = async_iter(events)
 
         subscriber = Subscriber(
@@ -73,7 +75,8 @@ class TestSubscriber:
 
         # Create a fake event for the subscriber to receive.
         events = [Event(data=b"event1", mimetype="text/plain")]
-        events[0].mark_subscribed(randbytes(10), MockQueue())
+        events[0].id = RLID(randbytes(10))
+        events[0].mark_subscribed(MockQueue())
         mock_subscribe.return_value = async_iter(events)
 
         class MySubscriber(Subscriber):
