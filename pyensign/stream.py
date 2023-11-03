@@ -4,10 +4,9 @@ import logging
 from datetime import datetime, timedelta
 
 from ulid import ULID
-from pyensign.events import from_proto
+from pyensign.events import Event
 from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.utils.queue import BidiQueue
-from pyensign.utils.tasks import with_callback
 from pyensign.api.v1beta1.event import wrap, unwrap
 from pyensign.exceptions import (
     EnsignError,
@@ -445,6 +444,6 @@ class Subscriber(StreamHandler):
                 raise rep
             else:
                 # Convert the event into the user facing type
-                event = from_proto(unwrap(rep))
+                event = Event.from_proto(unwrap(rep))
                 event.mark_subscribed(rep.id, self.queue)
                 yield event

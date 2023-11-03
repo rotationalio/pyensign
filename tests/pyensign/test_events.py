@@ -1,3 +1,4 @@
+from random import randbytes
 from datetime import datetime
 
 import pytest
@@ -194,6 +195,7 @@ class TestEvent:
         """
 
         event = Event(data=b"test", mimetype=mt.Unknown)
+        event.parse_id(randbytes(10))
         event._state = EventState.SUBSCRIBED
         event._stream = BidiQueue()
         await event.nack(nack.UnknownType)

@@ -1,6 +1,7 @@
 import os
 import pytest
 import asyncio
+from random import randbytes
 from datetime import timedelta
 from asyncmock import patch
 
@@ -272,7 +273,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         for i in range(3):
             # Send back an event to the client
             ew = event_pb2.EventWrapper(
-                id=ULID().bytes,
+                id=randbytes(10),
                 event=event_pb2.Event(
                     data="event {}".format(i).encode(),
                     type=event_pb2.Type(
@@ -297,7 +298,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     def EnSQL(self, request, context):
         for i in range(3):
             yield event_pb2.EventWrapper(
-                id=ULID().bytes,
+                id=randbytes(10),
                 event=event_pb2.Event(
                     data="event {}".format(i).encode(),
                     type=event_pb2.Type(

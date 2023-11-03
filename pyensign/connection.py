@@ -4,8 +4,8 @@ from ulid import ULID
 from grpc import aio
 from datetime import timedelta
 
+from pyensign.events import Event
 from pyensign.enum import TopicState
-from pyensign.events import from_proto
 from pyensign.version import user_agent
 from pyensign.utils.tasks import WorkerPool
 from pyensign.api.v1beta1.event import unwrap
@@ -474,7 +474,7 @@ class Cursor:
 
         # Read the next event from the stream
         try:
-            event = await self._stream.read()
+            ew = await self._stream.read()
         except grpc.aio.AioRpcError as e:
             self.close()
             if e.code() == grpc.StatusCode.CANCELLED:
@@ -486,9 +486,11 @@ class Cursor:
             return None
 
         # Handle unexpected end of stream
-        if event is grpc.aio.EOF:
+        if ew is grpc.aio.EOF:
             self.close()
             return None
 
         # Convert the event to the user-facing type
-        return from_proto(unwrap(event))
+        event = Event.from_proto(unwrap(ew))
+        event.parse_id(ew.id)
+        return event

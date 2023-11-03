@@ -2,6 +2,7 @@ import grpc
 import pytest
 import asyncio
 from ulid import ULID
+from random import randbytes
 from asyncmock import patch, AsyncMock
 from datetime import timedelta
 from unittest.mock import Mock
@@ -12,7 +13,7 @@ from pyensign.api.v1beta1 import ensign_pb2
 from pyensign.stream import StreamHandler, Publisher, Subscriber
 from pyensign.utils.queue import BidiQueue
 from pyensign.exceptions import EnsignTimeoutError, EnsignTypeError
-from pyensign.events import Event, EventState, from_proto
+from pyensign.events import Event, EventState
 
 
 class TestStreamHandler:
@@ -107,7 +108,7 @@ class TestPublisher:
             assert isinstance(req, ensign_pb2.PublisherRequest)
             wrapper = req.event
             assert wrapper.topic_id == publisher.topic.id.bytes
-            published = from_proto(unwrap(wrapper))
+            published = Event.from_proto(unwrap(wrapper))
             assert published.data == event.data
 
         # All events should be pending ACKs
@@ -257,9 +258,9 @@ class TestSubscriber:
         # Write some events to the queue
         events = [Event(data=b"foo %d" % i) for i in range(10)]
         for event in events:
-            await subscriber.queue.write_response(
-                wrap(event.proto(), subscriber.topics[0].id)
-            )
+            wrapper = wrap(event.proto(), subscriber.topics[0].id)
+            wrapper.id = randbytes(10)
+            await subscriber.queue.write_response(wrapper)
 
         # Consume the events
         async for event in subscriber.consume():

@@ -1,5 +1,6 @@
 import os
 from unittest import mock
+from random import randbytes
 
 import pytest
 from asyncmock import patch
@@ -40,7 +41,7 @@ class TestSubscriber:
     def test_run(self, mock_subscribe):
         # Create a fake event for the subscriber to receive.
         events = [Event(data=b"event1", mimetype="text/plain")]
-        events[0].mark_subscribed(None, BidiQueue())
+        events[0].mark_subscribed(randbytes(10), BidiQueue())
         mock_subscribe.return_value = async_iter(events)
 
         subscriber = Subscriber(
@@ -72,7 +73,7 @@ class TestSubscriber:
 
         # Create a fake event for the subscriber to receive.
         events = [Event(data=b"event1", mimetype="text/plain")]
-        events[0].mark_subscribed(None, MockQueue())
+        events[0].mark_subscribed(randbytes(10), MockQueue())
         mock_subscribe.return_value = async_iter(events)
 
         class MySubscriber(Subscriber):

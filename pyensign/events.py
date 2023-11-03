@@ -9,6 +9,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from pyensign.ack import Ack
 from pyensign.utils import pbtime
+from pyensign.utils.rlid import RLID
 from pyensign import mimetypes as mtype
 from pyensign.api.v1beta1 import ensign_pb2, event_pb2
 from pyensign.exceptions import CouldNotAck, CouldNotNack, NackError
@@ -100,6 +101,45 @@ class Event:
             created=self.created,
         )
 
+    @classmethod
+    def from_proto(cls, proto):
+        """
+        Convert a protocol buffer event into an Event.
+
+        Parameters
+        ----------
+        proto : api.v1beta1.event_pb2.Event
+            The protocol buffer event to convert.
+
+        Returns
+        -------
+        Event
+            The converted event.
+        """
+
+        event = cls(
+            data=proto.data,
+            mimetype=proto.mimetype,
+            meta=proto.metadata,
+        )
+
+        # Convert the schema type from the protocol buffer
+        event.type = Type(
+            name=proto.type.name,
+        )
+        event.type.major_version = proto.type.major_version
+        event.type.minor_version = proto.type.minor_version
+        event.type.patch_version = proto.type.patch_version
+        event.created = proto.created
+        return event
+
+    def parse_id(self, id):
+        """
+        Parse an ID onto the event.
+        """
+
+        self.id = RLID(id)
+
     def published(self):
         """
         Returns True if the event has been published (sent to the server).
@@ -158,7 +198,7 @@ class Event:
             raise CouldNotAck("Event has not been received by a subscriber")
 
         await self._stream.write_request(
-            ensign_pb2.SubscribeRequest(ack=ensign_pb2.Ack(id=self.id))
+            ensign_pb2.SubscribeRequest(ack=ensign_pb2.Ack(id=self.id.bytes))
         )
         self._state = EventState.ACKED
         return True
@@ -198,7 +238,9 @@ class Event:
             raise CouldNotNack("Event has not been received by a subscriber")
 
         await self._stream.write_request(
-            ensign_pb2.SubscribeRequest(nack=ensign_pb2.Nack(id=self.id, code=code))
+            ensign_pb2.SubscribeRequest(
+                nack=ensign_pb2.Nack(id=self.id.bytes, code=code)
+            )
         )
         self._state = EventState.NACKED
         return True
@@ -233,7 +275,7 @@ class Event:
         self._state = EventState.NACKED
 
     def mark_subscribed(self, id, ackback_stream):
-        self.id = id
+        self.parse_id(id)
         self._stream = ackback_stream
         self._state = EventState.SUBSCRIBED
 
@@ -419,38 +461,6 @@ def from_object(obj, mimetype=None, encoder=None):
             mimetype = mtype.ApplicationJSON
 
     return Event(data=data, mimetype=mimetype)
-
-
-def from_proto(proto):
-    """
-    Convert a protocol buffer event into an Event.
-
-    Parameters
-    ----------
-    proto : api.v1beta1.event_pb2.Event
-        The protocol buffer event to convert.
-
-    Returns
-    -------
-    Event
-        The converted event.
-    """
-
-    event = Event(
-        data=proto.data,
-        mimetype=proto.mimetype,
-        meta=proto.metadata,
-    )
-
-    # Convert the schema type from the protocol buffer
-    event.type = Type(
-        name=proto.type.name,
-    )
-    event.type.major_version = proto.type.major_version
-    event.type.minor_version = proto.type.minor_version
-    event.type.patch_version = proto.type.patch_version
-    event.created = proto.created
-    return event
 
 
 async def ack_event(event):
