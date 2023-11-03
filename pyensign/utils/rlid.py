@@ -49,3 +49,6 @@ class RLID:
 
     def __eq__(self, other):
         return self.bytes == other.bytes
+
+    def __lt__(self, other):
+        return self.bytes < other.bytes
