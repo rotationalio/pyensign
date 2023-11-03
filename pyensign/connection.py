@@ -20,6 +20,7 @@ from pyensign.auth.interceptor import (
 from pyensign.stream import Publisher, Subscriber
 from pyensign.exceptions import (
     QueryNoRows,
+    EnsignTypeError,
     EnsignClientClosingError,
 )
 
@@ -474,7 +475,7 @@ class Cursor:
 
         # Read the next event from the stream
         try:
-            ew = await self._stream.read()
+            wrapper = await self._stream.read()
         except grpc.aio.AioRpcError as e:
             self.close()
             if e.code() == grpc.StatusCode.CANCELLED:
@@ -486,11 +487,13 @@ class Cursor:
             return None
 
         # Handle unexpected end of stream
-        if ew is grpc.aio.EOF:
+        if wrapper is grpc.aio.EOF:
             self.close()
             return None
 
         # Convert the event to the user-facing type
-        event = Event.from_proto(unwrap(ew))
-        event.parse_id(ew.id)
+        try:
+            event = Event.from_wrapper(wrapper)
+        except ValueError as e:
+            raise EnsignTypeError("unparseable event in query result") from e
         return event

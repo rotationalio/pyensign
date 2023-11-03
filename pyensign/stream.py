@@ -444,6 +444,9 @@ class Subscriber(StreamHandler):
                 raise rep
             else:
                 # Convert the event into the user facing type
-                event = Event.from_proto(unwrap(rep))
-                event.mark_subscribed(rep.id, self.queue)
+                try:
+                    event = Event.from_wrapper(rep)
+                except ValueError as e:
+                    raise EnsignTypeError("unparseable event in Ensign response") from e
+                event.mark_subscribed(self.queue)
                 yield event

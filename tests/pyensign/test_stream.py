@@ -307,6 +307,23 @@ class TestSubscriber:
                 pass
 
     @pytest.mark.asyncio
+    async def test_consume_bad_id(self):
+        subscriber = Subscriber(
+            Mock(spec=["client_id", "stub", "topics"]),
+            [Topic(id=ULID(), name="topic")],
+        )
+
+        # Write an event with a bad ID to the queue
+        wrapper = wrap(Event(data=b"foo").proto(), subscriber.topics[0].id)
+        wrapper.id = b"NotAnRLID"
+        await subscriber.queue.write_response(wrapper)
+
+        # Should raise an exception when consumed
+        with pytest.raises(EnsignTypeError):
+            async for _ in subscriber.consume():
+                pass
+
+    @pytest.mark.asyncio
     async def test_handle_requests(self):
         subscriber = Subscriber(
             Mock(spec=["client_id", "stub", "topics"]),

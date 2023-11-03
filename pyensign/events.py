@@ -11,6 +11,7 @@ from pyensign.ack import Ack
 from pyensign.utils import pbtime
 from pyensign.utils.rlid import RLID
 from pyensign import mimetypes as mtype
+from pyensign.api.v1beta1.event import unwrap
 from pyensign.api.v1beta1 import ensign_pb2, event_pb2
 from pyensign.exceptions import CouldNotAck, CouldNotNack, NackError
 
@@ -133,12 +134,26 @@ class Event:
         event.created = proto.created
         return event
 
-    def parse_id(self, id):
+    @classmethod
+    def from_wrapper(cls, wrapper):
         """
-        Parse an ID onto the event.
+        Convert a protocol buffer event wrapper into an Event.
+
+        Parameters
+        ----------
+        wrapper : api.v1beta1.ensign_pb2.EventWrapper
+            The protocol buffer event wrapper to convert.
+
+        Returns
+        -------
+        Event
+            The converted event.
         """
 
-        self.id = RLID(id)
+        proto = unwrap(wrapper)
+        event = cls.from_proto(proto)
+        event.id = RLID(wrapper.id)
+        return event
 
     def published(self):
         """
@@ -274,8 +289,7 @@ class Event:
         self.error = nack
         self._state = EventState.NACKED
 
-    def mark_subscribed(self, id, ackback_stream):
-        self.parse_id(id)
+    def mark_subscribed(self, ackback_stream):
         self._stream = ackback_stream
         self._state = EventState.SUBSCRIBED
 

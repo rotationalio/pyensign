@@ -28,6 +28,7 @@ from pyensign.exceptions import (
     EnsignTimeoutError,
     AuthenticationError,
     EnsignRPCError,
+    EnsignTypeError,
     QueryNoRows,
     NackError,
 )
@@ -883,6 +884,28 @@ class TestClient:
         read.side_effect = AioRpcError(StatusCode.INVALID_ARGUMENT, None, None)
         with pytest.raises(EnsignRPCError):
             await client.en_sql("SELECT * FROM topic")
+
+    @pytest.mark.asyncio
+    @patch.object(InterceptedUnaryStreamCall, "read")
+    async def test_en_sql_bad_event(self, read, client):
+        async def results():
+            return event_pb2.EventWrapper(
+                id=b"NotAnRLID",
+                event=event_pb2.Event(
+                    data="event".encode(),
+                    type=event_pb2.Type(
+                        name="message",
+                        major_version=1,
+                        minor_version=2,
+                        patch_version=3,
+                    ),
+                ).SerializeToString(),
+            )
+
+        read.side_effect = results
+        with pytest.raises(EnsignTypeError):
+            await client.en_sql("SELECT * FROM topic")
+        await client.close()
 
     @pytest.mark.asyncio
     async def test_list_topics(self, client):
