@@ -121,6 +121,9 @@ config = {
     "download_url": "{}/tarball/v{}".format(REPOSITORY, get_version()),
     "packages": find_packages(where=PROJECT, exclude=EXCLUDES),
     "install_requires": list(get_requires()),
+    "extras_require": {
+        "ml": ["pandas==2.1.2"],
+    },
     "classifiers": CLASSIFIERS,
     "keywords": KEYWORDS,
     "zip_safe": False,
