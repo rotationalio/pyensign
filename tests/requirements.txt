@@ -1,6 +1,7 @@
 asyncmock==0.4.2
 grpcio==1.59.0
 grpcio-tools==1.59.0
+pandas==2.1.2
 protobuf==4.24.4
 PyJWT==2.8.0
 pytest==7.4.2

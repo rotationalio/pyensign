@@ -237,6 +237,34 @@ class Event:
         self._stream = ackback_stream
         self._state = EventState.SUBSCRIBED
 
+    def decode(self, decoder=None):
+        """
+        Decode the event data into a native Python object according to the mimetype. If
+        a decoder is provided, it will be used to decode the data instead of inferring
+        the decoder.
+        """
+        if decoder:
+            return decoder.decode(self.data)
+
+        # TODO: CSV support
+        if self.mimetype == mtype.ApplicationJSON:
+            try:
+                return json.loads(self.data)
+            except json.JSONDecodeError as e:
+                raise ValueError("error decoding event data from JSON") from e
+        elif self.mimetype == mtype.ApplicationPythonPickle:
+            try:
+                return pickle.loads(self.data)
+            except Exception as e:
+                raise ValueError("error decoding event data from pickle") from e
+        elif self.mimetype == mtype.TextPlain:
+            try:
+                return self.data.decode()
+            except UnicodeDecodeError as e:
+                raise ValueError("error decoding event data to string") from e
+        else:
+            return self.data
+
     def __repr__(self):
         repr = "Event("
         repr += "data={}, ".format(self.data)
