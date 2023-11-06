@@ -1,6 +1,7 @@
 import os
 import pytest
 import asyncio
+from random import randbytes
 from datetime import timedelta
 from asyncmock import patch
 
@@ -27,6 +28,7 @@ from pyensign.exceptions import (
     EnsignTimeoutError,
     AuthenticationError,
     EnsignRPCError,
+    EnsignTypeError,
     QueryNoRows,
     NackError,
 )
@@ -272,7 +274,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
         for i in range(3):
             # Send back an event to the client
             ew = event_pb2.EventWrapper(
-                id=ULID().bytes,
+                id=randbytes(10),
                 event=event_pb2.Event(
                     data="event {}".format(i).encode(),
                     type=event_pb2.Type(
@@ -297,7 +299,7 @@ class MockServicer(ensign_pb2_grpc.EnsignServicer):
     def EnSQL(self, request, context):
         for i in range(3):
             yield event_pb2.EventWrapper(
-                id=ULID().bytes,
+                id=randbytes(10),
                 event=event_pb2.Event(
                     data="event {}".format(i).encode(),
                     type=event_pb2.Type(
@@ -882,6 +884,28 @@ class TestClient:
         read.side_effect = AioRpcError(StatusCode.INVALID_ARGUMENT, None, None)
         with pytest.raises(EnsignRPCError):
             await client.en_sql("SELECT * FROM topic")
+
+    @pytest.mark.asyncio
+    @patch.object(InterceptedUnaryStreamCall, "read")
+    async def test_en_sql_bad_event(self, read, client):
+        async def results():
+            return event_pb2.EventWrapper(
+                id=b"NotAnRLID",
+                event=event_pb2.Event(
+                    data="event".encode(),
+                    type=event_pb2.Type(
+                        name="message",
+                        major_version=1,
+                        minor_version=2,
+                        patch_version=3,
+                    ),
+                ).SerializeToString(),
+            )
+
+        read.side_effect = results
+        with pytest.raises(EnsignTypeError):
+            await client.en_sql("SELECT * FROM topic")
+        await client.close()
 
     @pytest.mark.asyncio
     async def test_list_topics(self, client):

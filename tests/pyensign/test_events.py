@@ -1,3 +1,4 @@
+from random import randbytes
 from datetime import datetime
 
 import pytest
@@ -5,6 +6,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from pyensign import nack
 from pyensign import mimetypes as mt
+from pyensign.utils.rlid import RLID
 from pyensign.utils.queue import BidiQueue
 from pyensign.events import Event, EventState, Type
 from pyensign.api.v1beta1 import event_pb2, ensign_pb2
@@ -194,6 +196,7 @@ class TestEvent:
         """
 
         event = Event(data=b"test", mimetype=mt.Unknown)
+        event.id = RLID(randbytes(10))
         event._state = EventState.SUBSCRIBED
         event._stream = BidiQueue()
         await event.nack(nack.UnknownType)
