@@ -138,8 +138,6 @@ class TestDataFrame:
             fillna=fillna,
             index=index,
         )
-        print(df)
-        print(expected)
         assert df.equals(expected)
 
     @pytest.mark.asyncio
