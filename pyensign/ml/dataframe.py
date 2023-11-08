@@ -1,6 +1,10 @@
 from enum import Enum
 
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+    raise ImportError("please `pip install pyensign[ml]` to use PyEnsign DataFrames")
 
 
 class DataFrame(pd.DataFrame):
