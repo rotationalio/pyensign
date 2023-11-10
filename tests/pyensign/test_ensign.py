@@ -1,18 +1,22 @@
 import os
 import json
+import time
 import pickle
 import pytest
 import asyncio
+from datetime import datetime
+
 from ulid import ULID
 from unittest import mock
 from asyncmock import patch
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from pyensign.events import Event
 from pyensign.connection import Cursor
 from pyensign.topics import Topic
 from pyensign.api.v1beta1 import ensign_pb2, topic_pb2, query_pb2, event_pb2
 from pyensign.ensign import Ensign, authenticate, publisher, subscriber
-from pyensign.enum import TopicState
+from pyensign.enum import TopicState, DeduplicationStrategy, OffsetPosition
 from pyensign.exceptions import (
     EnsignTopicCreateError,
     EnsignTopicDestroyError,
@@ -849,10 +853,39 @@ class TestEnsign:
     @pytest.mark.asyncio
     @patch("pyensign.connection.Client.list_topics")
     async def test_get_topics(self, mock_list, ensign):
-        topics = [topic_pb2.Topic(id=ULID().bytes, name="otters")]
+        topic_id = ULID()
+        project_id = ULID()
+        topics = [
+            topic_pb2.Topic(
+                id=topic_id.bytes,
+                project_id=project_id.bytes,
+                name="otters",
+                offset=42,
+                status=topic_pb2.TopicState.READY,
+                deduplication=topic_pb2.Deduplication(
+                    strategy=topic_pb2.Deduplication.Strategy.KEY_GROUPED,
+                    offset=topic_pb2.Deduplication.OffsetPosition.OFFSET_EARLIEST,
+                    keys=["foo"],
+                    overwrite_duplicate=True,
+                ),
+                created=Timestamp(seconds=int(time.time())),
+                modified=Timestamp(seconds=int(time.time())),
+            )
+        ]
         mock_list.return_value = (topics, "")
-        recv = await ensign.get_topics()
-        assert recv[0].name == topics[0].name
+        actual = await ensign.get_topics()
+        assert len(actual) == 1
+        assert actual[0].id == topic_id
+        assert actual[0].project_id == project_id
+        assert actual[0].name == "otters"
+        assert actual[0].offset == 42
+        assert actual[0].status == TopicState.READY
+        assert actual[0].deduplication.strategy == DeduplicationStrategy.KEY_GROUPED
+        assert actual[0].deduplication.offset == OffsetPosition.OFFSET_EARLIEST
+        assert actual[0].deduplication.keys == ["foo"]
+        assert actual[0].deduplication.overwrite_duplicate
+        assert isinstance(actual[0].created, datetime)
+        assert isinstance(actual[0].modified, datetime)
 
         # TODO: test pagination
 

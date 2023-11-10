@@ -1,5 +1,7 @@
 from pyensign.utils import ulid
 from pyensign.events import Type
+from pyensign.utils import pbtime
+from pyensign.enum import TopicState, DeduplicationStrategy, OffsetPosition
 
 
 class Topic(object):
@@ -20,7 +22,12 @@ class Topic(object):
         self.events = 0
         self.duplicates = 0
         self.data_size_bytes = 0
+        self.offset = 0
+        self.status = None
+        self.deduplication = None
         self.types = []
+        self.created = None
+        self.modified = None
 
     def __hash__(self):
         if self.id is None:
@@ -47,6 +54,8 @@ class Topic(object):
             s += "\n\tid={}".format(self.id)
         if self.name:
             s += "\n\tname={}".format(self.name)
+        if self.status:
+            s += "\n\tstatus={}".format(self.status)
         if self.project_id:
             s += "\n\tproject_id={}".format(self.project_id)
         if self.event_offset_id:
@@ -56,11 +65,31 @@ class Topic(object):
         s += "\n\tevents={}".format(self.events)
         s += "\n\tduplicates={}".format(self.duplicates)
         s += "\n\tdata_size_bytes={}".format(self.data_size_bytes)
+        s += "\n\toffset={}".format(self.offset)
         s += "\n\ttypes:{}".format(len(self.types))
         for type in self.types:
             s += "\n\t"
             s += str(type).replace("\t", "\t\t")
+        if self.created:
+            s += "\n\tcreated={}".format(self.created)
+        if self.modified:
+            s += "\n\tmodified={}".format(self.modified)
         return s
+
+    @classmethod
+    def from_proto(cls, pb_val):
+        """
+        Convert a protocol buffer Topic into a Topic.
+        """
+
+        topic = cls(id=pb_val.id, name=pb_val.name)
+        topic.project_id = ulid.parse(pb_val.project_id)
+        topic.offset = pb_val.offset
+        topic.status = TopicState.convert(pb_val.status)
+        topic.deduplication = Deduplication.convert(pb_val.deduplication)
+        topic.created = pbtime.to_datetime(pb_val.created)
+        topic.modified = pbtime.to_datetime(pb_val.modified)
+        return topic
 
     @classmethod
     def from_info(cls, pb_val):
@@ -77,6 +106,61 @@ class Topic(object):
         for type in pb_val.types:
             topic.types.append(EventType.from_info(type))
         return topic
+
+
+class Deduplication(object):
+    """
+    Deduplication stores information about how a topic is deduplicated, including the
+    configured deduplication strategy and offset position.
+    """
+
+    def __init__(
+        self,
+        strategy=DeduplicationStrategy.NONE,
+        offset=OffsetPosition.OFFSET_EARLIEST,
+        keys=None,
+        fields=None,
+        overwrite_duplicate=False,
+    ):
+        self.strategy = strategy
+        self.offset = offset
+        self.keys = keys
+        self.fields = fields
+        self.overwrite_duplicate = overwrite_duplicate
+
+    def __repr__(self):
+        repr = "Deduplication("
+        repr += "strategy={}, ".format(self.strategy)
+        repr += "offset={},".format(self.offset)
+        repr += "keys={}, ".format(self.keys)
+        repr += "fields={}, ".format(self.fields)
+        repr += "overwrite_duplicate={}".format(self.overwrite_duplicate)
+        repr += ")"
+        return repr
+
+    def __str__(self):
+        s = "Deduplication"
+        s += "\n\tstrategy={}".format(self.strategy)
+        s += "\n\toffset={}".format(self.offset)
+        s += "\n\tkeys={}".format(self.keys)
+        s += "\n\tfields={}".format(self.fields)
+        s += "\n\toverwrite_duplicate={}".format(self.overwrite_duplicate)
+        return s
+
+    @classmethod
+    def convert(cls, pb_val):
+        """
+        Convert a protocol buffer Deduplication into a Deduplication.
+        """
+
+        dedup = cls(
+            strategy=DeduplicationStrategy.convert(pb_val.strategy),
+            offset=OffsetPosition.convert(pb_val.offset),
+            keys=pb_val.keys,
+            fields=pb_val.fields,
+            overwrite_duplicate=pb_val.overwrite_duplicate,
+        )
+        return dedup
 
 
 class EventType(object):
