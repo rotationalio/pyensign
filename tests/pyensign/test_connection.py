@@ -635,6 +635,30 @@ class TestClient:
         mock_write.side_effect = None
         await client.close()
 
+    @pytest.mark.asyncio
+    async def test_publish_close(self, client):
+        """
+        Closing the client should flush the publish queue.
+        """
+
+        events = [
+            Event("event {}".format(i).encode(), mimetype="text/plain")
+            for i in range(1000)
+        ]
+
+        async def source_events():
+            for event in events:
+                yield event
+
+        await client.publish(OTTERS_TOPIC, source_events())
+        for publisher in client.publishers.values():
+            assert not publisher.queue._request_queue.empty()
+
+        # Close the client, events should be flushed.
+        await client.close()
+        for publisher in client.publishers.values():
+            assert publisher.queue._request_queue.empty()
+
     def test_publish_sync(self, client):
         """
         Test executing publish from synchronous code as a coroutine.
