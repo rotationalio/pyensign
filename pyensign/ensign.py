@@ -364,11 +364,12 @@ class Ensign:
 
     async def get_topics(self) -> List[Any]:
         """
-        Get all topics.
+        Get a list of topics in the project. To get a greater level of detail with
+        data usage and event counts, use the `info()` method instead.
 
         Yields
         ------
-        api.v1beta1.topic_pb2.Topic
+        List[Topic]
             The topics.
         """
 
@@ -377,7 +378,8 @@ class Ensign:
         token = ""
         while page is None or token != "":
             page, token = await self.client.list_topics(next_page_token=token)
-            topics.extend(page)
+            for topic in page:
+                topics.append(Topic.from_proto(topic))
         return topics
 
     async def create_topic(self, topic_name: str) -> str:
