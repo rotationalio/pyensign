@@ -1199,6 +1199,35 @@ class TestEnsign:
         assert state == TopicState.READY
 
     @pytest.mark.asyncio
+    async def test_live_multi_publish(self, live, creds, authserver, ensignserver):
+        if not live:
+            pytest.skip("Skipping live test")
+        if not authserver:
+            pytest.skip("Skipping live test")
+        if not ensignserver:
+            pytest.skip("Skipping live test")
+
+        ensign = Ensign(endpoint=ensignserver, auth_url=authserver, cred_path=creds)
+        events = [
+            Event("event {}".format(i).encode(), mimetype="text/plain")
+            for i in range(10)
+        ]
+        topic = "python-events"
+
+        # Ensure the topic exists
+        await ensign.ensure_topic_exists(topic)
+
+        # Publish the event
+        await ensign.publish(topic, events)
+
+        # Close the client to flush the events
+        await ensign.close()
+
+        # All events should be published
+        for event in events:
+            assert event.published()
+
+    @pytest.mark.asyncio
     async def test_live_pubsub(self, live, creds, authserver, ensignserver):
         if not live:
             pytest.skip("Skipping live test")
